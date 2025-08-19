@@ -1,0 +1,5 @@
+cmd/main
+.env.stage.dev
+.env.stage.prod
+.env.stage.test
+.env.stage.local
