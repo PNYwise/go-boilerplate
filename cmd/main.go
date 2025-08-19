@@ -15,8 +15,15 @@ import (
 )
 
 func main() {
-	// mode := os.Getenv("MODE") // http, rabbit, gr
-	// 	// ---- 1) Parse simple CLI flags (no binding) ----
+	// how to run:
+	// go run cmd/main.go --mode http --stage dev
+	// go run cmd/main.go --mode rabbit --stage dev
+
+	// how to build:
+	// go build -o bin/app cmd/main.go
+	// ./bin/app --mode http --stage dev
+
+
 	modeFlag := flag.String("mode", "", "application mode: http or rabbit")
 	stageFlag := flag.String("stage", "", "stage name: dev, staging, prod, etc.")
 	flag.Parse()
@@ -38,12 +45,6 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-
-	fmt.Println("Starting application in mode: ", mode)
-	fmt.Println("Application Name: ", cfg.AppName)
-	fmt.Println("HTTP Address: ", cfg.HTTPAddr)
-	fmt.Println("db Address: ", cfg.DbHost)
-	fmt.Println("db Address: ", cfg.DbName)
 
 	a, err := app.New(cfg)
 	if err != nil {
