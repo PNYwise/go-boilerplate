@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	app "go-boilerplate/internal/apps"
 	"go-boilerplate/internal/configs"
 	"os"
@@ -22,7 +21,6 @@ func main() {
 	// how to build:
 	// go build -o bin/app cmd/main.go
 	// ./bin/app --mode http --stage dev
-
 
 	modeFlag := flag.String("mode", "", "application mode: http or rabbit")
 	stageFlag := flag.String("stage", "", "stage name: dev, staging, prod, etc.")
