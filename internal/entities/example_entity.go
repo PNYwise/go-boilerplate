@@ -4,8 +4,8 @@ import "time"
 
 // ExampleEntity represents an example entity with user, amount, and date fields.
 type ExampleEntity struct {
-	ID     string    `validate:"required"`
-	UserID string    `validate:"required"`
-	Amount int64     `validate:"required,gt=0"`
-	Date   time.Time `validate:"required"`
+	ID     string    `json:"id"`
+	UserID string    `json:"user_id"`
+	Amount int64     `json:"amount"`
+	Date   time.Time `json:"date"`
 }

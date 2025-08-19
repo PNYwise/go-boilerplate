@@ -44,10 +44,5 @@ func (s *exampleService) CreateExample(ctx context.Context, o exampledtos.Exampl
 		UserID: o.UserID,
 		Amount: o.Amount,
 	}
-
-	// Validate the entity
-	if err := s.validator.Struct(entity); err != nil {
-		return 0, err
-	}
 	return s.exampleRepo.Create(ctx, entity)
 }
