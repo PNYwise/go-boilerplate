@@ -3,7 +3,7 @@ package http
 import (
 	"context"
 	"go-boilerplate/internal/configs"
-	"go-boilerplate/internal/services"
+	"go-boilerplate/internal/transports/http/handlers"
 	"net/http"
 	"time"
 
@@ -18,11 +18,16 @@ type Server struct {
 	eng *gin.Engine
 }
 
-// NewHTTPServer initializes a new HTTP server with the provided services.
+// NewHTTPServer initializes a new HTTP server with the provided handlers.
 // It sets up the Gin engine, applies middleware, and registers routes.
 // The server is ready to handle incoming HTTP requests.
 // The health check route is also defined here for basic server health monitoring.
-func NewHTTPServer(svcs services.Register, cfg configs.Config) *Server {
+func NewHTTPServer(
+	exampleHandler *handlers.ExampleHandler,
+	healthHandler *handlers.HealthHandler,
+	userHandler *handlers.UserHandler,
+	cfg configs.Config,
+) *Server {
 	r := gin.New()
 	r.Use(gin.Recovery())
 
@@ -32,7 +37,7 @@ func NewHTTPServer(svcs services.Register, cfg configs.Config) *Server {
 	})
 
 	// Load application routes
-	RegisterRoutes(r, svcs, cfg)
+	RegisterRoutes(r, exampleHandler, healthHandler, userHandler, cfg)
 
 	return &Server{eng: r}
 }

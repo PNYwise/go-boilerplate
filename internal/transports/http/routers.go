@@ -2,30 +2,41 @@ package http
 
 import (
 	"go-boilerplate/internal/configs"
-	"go-boilerplate/internal/services"
 	"go-boilerplate/internal/transports/http/handlers"
-	middewares "go-boilerplate/internal/transports/http/middlewares"
+	middlewares "go-boilerplate/internal/transports/http/middlewares"
 
 	"github.com/gin-gonic/gin"
 )
 
 // RegisterRoutes sets up all API routes grouped by version/module
-func RegisterRoutes(r *gin.Engine, svcs services.Register, cfg configs.Config) {
-	// inisiate ExampleHandler with the ExampleService from services.Register
-	// This allows the handler to use the service for business logic operations.
-	// The handler methods will call the service methods to perform actions like creating, updating, or deleting examples.
-	// This approach promotes separation of concerns and makes the code more maintainable.
-	exampleHandler := handlers.NewExampleHandler(svcs.ExampleService)
-	// add more handlers if needed
-
+func RegisterRoutes(
+	r *gin.Engine,
+	exampleHandler *handlers.ExampleHandler,
+	healthHandler *handlers.HealthHandler,
+	userHandler *handlers.UserHandler,
+	cfg configs.Config,
+) {
 	// Build middleware from config
-	basicAuthMiddleware := middewares.BasicAuthMiddleware(cfg)
-	// add more middewares if needed
+	basicAuthMiddleware := middlewares.BasicAuthMiddleware(cfg)
 
-	// Define the routes for the example module
-	exampleRoute := r.Group("/example", basicAuthMiddleware)
+	// Health routes (no auth required)
+	r.GET("/health", healthHandler.HealthCheck)
+
+	// API v1 routes
+	v1 := r.Group("/api/v1")
 	{
-		// Users
-		exampleRoute.POST("/", exampleHandler.CreateExample)
+		// Example routes with auth
+		exampleGroup := v1.Group("/example", basicAuthMiddleware)
+		{
+			exampleGroup.POST("/", exampleHandler.CreateExample)
+		}
+
+		// User routes with auth
+		userGroup := v1.Group("/users", basicAuthMiddleware)
+		{
+			userGroup.POST("/", userHandler.CreateUser)
+			userGroup.GET("/:id", userHandler.GetUserByID)
+			userGroup.GET("/username/:username", userHandler.GetUserByUsername)
+		}
 	}
 }

@@ -103,6 +103,49 @@ Penjelasan tanggung jawab tiap layer dan aliran data antar layer:
 
 ---
 
+## Dependency Injection dengan Wire
+
+Proyek ini menggunakan [Google Wire](https://github.com/google/wire) untuk dependency injection yang aman dan performant.
+
+### Keuntungan Wire
+- **Compile-time safety**: Semua dependensi diresolve saat compile time
+- **Zero runtime overhead**: Tidak ada reflection atau service locator
+- **Explicit dependencies**: Dependency chain yang jelas dan mudah di-trace
+- **Easy testing**: Mudah untuk inject mock dependencies
+
+### Wire Structure
+```
+internal/wire/
+├── wire.go          # Definisi providers dan injectors
+└── wire_gen.go      # Kode yang di-generate otomatis (JANGAN EDIT)
+```
+
+### Provider Sets
+- **DatabaseSet**: Koneksi database MySQL
+- **ValidationSet**: Input validation
+- **LoggerSet**: Structured logging dengan Elasticsearch
+- **RepositorySet**: Semua repository implementations
+- **ServiceSet**: Business logic services
+- **HTTPSet**: HTTP server dengan routing
+
+### Menggunakan Wire
+
+#### Generate kode Wire:
+```bash
+make wire
+```
+
+#### Menambah dependency baru:
+1. Buat provider function di package yang sesuai
+2. Tambahkan ke provider set di `internal/wire/wire.go`  
+3. Update service register jika perlu
+4. Jalankan `make wire` untuk regenerate
+
+### Detail Documentation
+Lihat [WIRE.md](WIRE.md) untuk dokumentasi lengkap tentang penggunaan Wire.
+
+---
+
 ## Testing
 
 - Nama file test: `xxx_test.go`

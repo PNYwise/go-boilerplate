@@ -1,6 +1,7 @@
 package logs
 
 import (
+	"go-boilerplate/internal/configs"
 	"os"
 	"time"
 
@@ -265,4 +266,15 @@ func NewWithElastic(serviceName string, tzName string, es ESOpts) (*zap.Logger, 
 		zap.String("service_name", serviceName),
 	)
 	return logger, stopper, nil
+}
+
+// ProvideLogger provides a zap logger for Wire dependency injection
+func ProvideLogger(cfg configs.Config) (*zap.Logger, func(), error) {
+	// Simple development logger - you can enhance this to use config values
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		return nil, nil, err
+	}
+	
+	return logger, func() { _ = logger.Sync() }, nil
 }

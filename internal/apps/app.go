@@ -1,33 +1,15 @@
-package app
+package apps
 
 import (
 	"context"
 	"fmt"
 	"go-boilerplate/internal/configs"
-	"go-boilerplate/internal/dbs"
-	"go-boilerplate/internal/repositories"
-	"go-boilerplate/internal/services"
-	"go-boilerplate/internal/transports/http"
-	"go-boilerplate/internal/utils/logs"
-	"go-boilerplate/internal/utils/validation"
-	"log"
-	"os"
-	"time"
 
 	"go.uber.org/zap"
 )
 
 // Mode represents the application mode in which it runs.
 // It can be HTTP, RabbitMQ, or gRPC.
-// This is used to determine how the application should behave when started.
-// It is defined as a string type for flexibility and clarity.
-// The Mode type is used to specify the operational mode of the application.
-// It allows the application to adapt its behavior based on the mode it is running in.
-// This is particularly useful for applications that can serve multiple purposes or interfaces.
-// For example, an application might run as a web server in HTTP mode, consume messages from RabbitMQ in Rabbit mode,
-// or provide gRPC services in gRPC mode.
-// The Mode type is used to distinguish between these different operational contexts.
-// It is defined as a string type for flexibility and clarity.
 type Mode string
 
 // Available application modes.
@@ -40,90 +22,58 @@ const (
 	ModeGRPC Mode = "grpc"
 )
 
-// App creates a new App instance with the provided configuration.
+// App represents the main application with all wired dependencies
 type App struct {
-	Cfg    configs.Config
-	Logger *zap.Logger
-	stopLog func()
+	application *Application
+	cleanup     func()
+	logger      *zap.Logger
+	config      configs.Config
 }
 
-// Run initializes the application based on the provided mode and context.
+// New creates a new App instance with all dependencies wired via Wire
+func New(cfg configs.Config) (*App, error) {
+	// Use Wire to initialize all dependencies
+	application, cleanup, err := InitializeApp(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize application: %w", err)
+	}
+
+	return &App{
+		application: application,
+		cleanup:     cleanup,
+		logger:      application.Logger,
+		config:      cfg,
+	}, nil
+}
+
+// Run starts the application in the specified mode
 func (a *App) Run(ctx context.Context, mode Mode) error {
-	defer a.Close()
-	pool, err := dbs.NewMySQLDB(a.Cfg)
-	if condition := err != nil; condition {
-		a.Logger.Error("failed to connect to database", zap.Error(err))
-		return fmt.Errorf("failed to connect to database: %w", err)
-	}
-	a.Logger.Info("connected to database successfully")
-	defer pool.Close()
-
-	v := validation.GetValidator()
-
-	// Initialize Example repositories and services
-	repo := repositories.NewExampleRepository(pool)
-	//add more repositories if needed
-
-	// Create a service register to hold all services
-	// This is where the application services are registered.
-	// The services are responsible for handling business logic and interacting with repositories.
-	serviceRegister := services.Register{
-		ExampleService: services.NewExampleService(repo, a.Logger, a.Cfg, v),
-		// add more services to the service register if needed
-	}
+	a.logger.Info("Application starting", zap.String("mode", string(mode)))
 
 	switch mode {
 	case ModeHTTP:
-		h := http.NewHTTPServer(serviceRegister, a.Cfg)
-		// Start the HTTP server with the provided context and address from the configuration.
-		// The server will listen for incoming HTTP requests and handle them using the registered routes.
-		a.Logger.Info("starting HTTP server", zap.String("address", a.Cfg.HTTPAddr))
-		return h.Run(ctx, a.Cfg.HTTPAddr)
-	case ModeRabbit:
-		// r := handler.NewPatternRouter()
-		// consumer := rabbit.NewResilientConsumer(a.Cfg, r, a.Logger)
-		// return consumer.Run(ctx)
-		return fmt.Errorf("please setup the %s mode first", mode)
+		a.logger.Info("Starting HTTP server", zap.String("address", a.config.HTTPAddr))
+		return a.application.HTTPServer.Run(ctx, a.config.HTTPAddr)
 	case ModeGRPC:
-		// return grpcx.RunGRPCServer(ctx, svc, a.Cfg.GRPCAddr)
-		return fmt.Errorf("please setup the %s mode first", mode)
+		return fmt.Errorf("gRPC mode not implemented yet")
+	case ModeRabbit:
+		return fmt.Errorf("RabbitMQ mode not implemented yet")
 	default:
 		return fmt.Errorf("unknown mode: %s", mode)
 	}
 }
 
-// New initializes the application with the provided configuration.
-// It sets up the logger and prepares the application for running in the specified mode.
-// It returns an App instance or an error if initialization fails.
-func New(cfg configs.Config) (*App, error) {
-
-	// Prepare Elasticsearch options (could come from cfg)
-	esOpts := logs.ESOpts{
-		Enabled:       cfg.ElasticEnabled,
-		Addresses:     cfg.ElasticAddresses,
-		Index:         cfg.ElasticIndex,
-		APIKey:        cfg.ElasticAPIKey,
-		Username:      cfg.ElasticUsername,
-		Password:      cfg.ElasticPassword,
-		FlushBytes:    cfg.ElasticBulkFlushBytes,
-		FlushInterval: time.Duration(cfg.ElasticBulkFlushIntervalMS) * time.Millisecond,
+// Shutdown gracefully shuts down the application
+func (a *App) Shutdown() {
+	if a.cleanup != nil {
+		a.cleanup()
 	}
-
-	// Initialize logger
-	logger, stopES, err := logs.NewWithElastic(cfg.AppName, os.Getenv("LOG_TZ"), esOpts)
-	if err != nil {
-		log.Fatalf("failed to init logger: %v", err)
+	if a.logger != nil {
+		_ = a.logger.Sync()
 	}
-
-	return &App{Cfg: cfg, Logger: logger, stopLog: stopES}, nil
 }
 
-// Close releases application resources like logger sinks.
-func (a *App) Close() {
-	if a.stopLog != nil {
-		a.stopLog()
-	}
-	if a.Logger != nil {
-		_ = a.Logger.Sync()
-	}
+// GetLogger returns the application logger
+func (a *App) GetLogger() *zap.Logger {
+	return a.logger
 }

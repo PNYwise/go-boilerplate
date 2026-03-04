@@ -9,8 +9,8 @@
 # Binary name for the compiled application
 BINARY_NAME=main
 
-# The path to the main package to build/run
-CMD_PATH=./cmd/main.go
+# The path to the main package to build/run  
+CMD_PATH=./cmd
 
 # Go command
 GO=go
@@ -24,7 +24,7 @@ LDFLAGS=-ldflags="-s -w"
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build dev prod clean
+.PHONY: help build dev prod clean wire
 
 help: ## ✨ Show this help message
 	@echo "Available commands:"
@@ -47,6 +47,11 @@ test: ## 🧪 Run all tests
 coverage: ## 🧪 coverage report
 	@echo "Running tests..."
 	@$(GO) tool cover -html=coverage.out
+
+wire: ## ⚡ Generate wire dependency injection code
+	@echo "Generating wire dependency injection code..."
+	@cd internal/apps && wire
+	@echo "Wire code generation completed"
 
 local: ## 🚀 Run the application in local mode (with hot-reload)
 	@echo "Starting dev server with hot-reload (requires 'air')..."
