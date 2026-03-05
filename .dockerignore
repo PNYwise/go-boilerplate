@@ -1,1 +1,55 @@
+# Dockerignore file - Optimize build context and speed
+# ====================================================================================
+
+# Git files
+.git
 .gitignore
+.gitattributes
+
+# Documentation
+README.md
+docs/
+*.md
+
+# Development files
+.air.*.toml
+Makefile
+
+# Environment files (secrets)
+.env*
+!.env.example
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Build artifacts
+tmp/
+cmd/main
+coverage.out
+
+# Node modules (if any)
+node_modules/
+
+# Test files
+*_test.go
+testdata/
+
+# Vendor (if using)
+vendor/
+
+# Log files
+*.log
+logs/

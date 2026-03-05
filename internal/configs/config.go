@@ -68,13 +68,13 @@ type Config struct {
 	GrpcAddr string
 }
 
-// MustLoad loads the configuration from environment variables (seamless, no mode required)
 func MustLoad(stage string) Config {
-	envFile := ".env"
 	if stage != "" {
-		envFile = fmt.Sprintf(".env.stage.%s", stage)
+		envFile := fmt.Sprintf(".env.stage.%s", stage)
+		loadDotenvIfPresent(envFile)
+	} else {
+		loadDotenvIfPresent(".env")
 	}
-	loadDotenvIfPresent(envFile)
 
 	// Build config from environment (with defaults)
 	cfg := Config{

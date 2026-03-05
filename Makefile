@@ -24,7 +24,7 @@ LDFLAGS=-ldflags="-s -w"
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build dev prod clean wire
+.PHONY: help build dev prod clean wire docker-build docker-run docker-prod docker-clean
 
 help: ## ✨ Show this help message
 	@echo "Available commands:"
