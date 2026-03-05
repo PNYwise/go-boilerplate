@@ -1,8 +1,8 @@
-# Go Boilerplate
+# Go Boilerplate - Simplified & Seamless
 
 ## Deskripsi Singkat
 
-Template boilerplate untuk layanan backend menggunakan Go. Berfungsi sebagai panduan dan standar struktur kode, konvensi penamaan, serta contoh implementasi utilitas, repository, service, dan handler HTTP (Gin).
+Template boilerplate untuk layanan backend menggunakan Go dengan arsitektur **seamless dan ultra-sederhana**. Fokus ke single transport (HTTP by default) dengan mudah switching ke gRPC/RabbitMQ saat dibutuhkan. 95% development terjadi di satu file: `internal/apps/wire.go`.
 
 ---
 
@@ -14,16 +14,18 @@ Template boilerplate untuk layanan backend menggunakan Go. Berfungsi sebagai pan
 - **README.md**: Dokumentasi proyek
 
 ### Direktori Utama
-- **cmd/**: Entrypoint aplikasi. Setiap subfolder mewakili satu binary/entrypoint (misal: `main`). Di dalamnya diparsing flag, inisialisasi konfigurasi, dan memanggil wiring aplikasi.
+- **cmd/**: Entrypoint aplikasi (DO NOT MODIFY). Bootstrap generik yang handle semua transport modes.
 - **internal/**: Kode aplikasi yang tidak diekspor ke package lain. Struktur internal merepresentasikan boundary arsitektur aplikasi.
-  - **apps/**: Wiring dan bootstrap aplikasi (menghubungkan repo, service, transport, migration, health checks)
-  - **configs/**: Definisi struct konfigurasi, loader, dan validasi konfigurasi (file/env precedence)
+  - **apps/**: 
+    - **wire.go** - 🎯 **PRIMARY FILE** - Semua customization development di sini
+    - **app.go** - Core lifecycle management (DO NOT MODIFY)
+  - **configs/**: Definisi struct konfigurasi, loader seamless tanpa mode switching
   - **dbs/**: Inisialisasi koneksi database, pool, helper transaksi, dan health checks DB
   - **dtos/**: Transport-level data shapes (request/response DTO), dipisah dari domain entities
   - **entities/**: Domain models dan value objects
   - **repositories/**: Definisi interface repository dan implementasi penyimpanan/data access (SQL/NoSQL/cache/RestApi). Pisahkan interface dan implementasi untuk memudahkan mocking
   - **services/**: Use-cases / business logic yang mengorkestrasi repositori dan external clients
-  - **transports/**: Adapter transport (HTTP, gRPC, RMQ)
+  - **transports/**: Adapter transport (HTTP by default, easily switchable)
     - Untuk HTTP: `transports/http/router.go`, `handlers/`, `middlewares/`
   - **utils/**
     - **validation/**: Aturan validasi input (dipanggil sebelum masuk ke service)
@@ -58,10 +60,32 @@ Penjelasan tanggung jawab tiap layer dan aliran data antar layer:
 - Aliran: nilai config diinject ke konstruktor (dependency injection) untuk digunakan oleh apps, repositori, dan services
 
 ### Apps / Wiring (`internal/apps`)
-- Menyusun dan menghubungkan semua dependensi (repo, service, handler)
-- Mengatur lifecycle (migrations, health checks)
-- Memulai transport
-- Aliran: menerima config & infra → instantiate komponen → registrasi route & middleware → mulai server
+- **wire.go**: 🎯 **DEVELOPER ZONE** - Semua customization (repositories, services, handlers) diatur di sini
+- **app.go**: Core lifecycle management, panic recovery, resource cleanup (DO NOT MODIFY)
+- Mengatur dependency injection dengan Wire
+- Aliran: wire.go configuration → automatic dependency injection → application ready
+
+### Seamless Development Workflow
+**95% development terjadi di `wire.go`:**
+```go
+// Tambah repository
+var RepositoryProviders = wire.NewSet(
+    repositories.NewUserRepository,
+    repositories.NewProductRepository,  // ← Tambah di sini
+)
+
+// Tambah service  
+var ServiceProviders = wire.NewSet(
+    services.NewUserService,
+    services.NewProductService,  // ← Tambah di sini
+)
+
+// Tambah handler
+var HandlerProviders = wire.NewSet(
+    httphandlers.NewUserHandler,
+    httphandlers.NewProductHandler,  // ← Tambah di sini
+)
+```
 
 ### Transports (HTTP) — Router & Server (`transports/http`)
 - Menerima koneksi masuk, routing, dan lifecycle server
@@ -69,7 +93,7 @@ Penjelasan tanggung jawab tiap layer dan aliran data antar layer:
 
 ---
 
-## Environment, Stage & Mode
+## Environment & Stage Configuration (Seamless)
 
 ### File .env
 .env files menyimpan variabel lingkungan; **jangan commit file yang berisi kredensial**. Simpan contoh variabel di `.env.example` atau `.env.stage.example`.
@@ -77,33 +101,57 @@ Penjelasan tanggung jawab tiap layer dan aliran data antar layer:
 #### File env per stage
 - Gunakan file terpisah per stage untuk memudahkan deployment dan pengujian:
   - `.env.stage.local`
-  - `.env.stage.development`
+  - `.env.stage.development` 
   - `.env.stage.staging`
   - `.env.stage.production`
-- Pilih konvensi nama yang konsisten di seluruh tim (misal: gunakan `production` bukan `prod`, kecuali jika ada mapping jelas)
+- Pilih konvensi nama yang konsisten di seluruh tim
 
 #### Flag --stage
-- Memilih konfigurasi environment (lokal, development, staging, production)
+- Memilih konfigurasi environment (local, development, staging, production)
 - Menentukan file env yang akan dimuat, level logging default, koneksi ke resource (DB/queue), dan perilaku fitur
 
-#### Flag --mode
-- Menentukan subsistem yang dijalankan oleh binary
-- Nilai umum: `http`, `grpc`, `worker`, `migrate`, `cli`
-- Setiap mode hanya inisialisasi komponen yang diperlukan (misal: `migrate` hanya menyiapkan koneksi DB dan menjalankan migrasi)
+**Running aplikasi:**
+```bash
+# Default (no config needed)
+go run ./cmd
+
+# With stage
+go run ./cmd -stage=dev
+go run ./cmd -stage=staging 
+go run ./cmd -stage=prod
+```
+
+#### Transport Switching (Wire-based, No Mode Flags)
+**Untuk switch transport (HTTP → gRPC), hanya edit `wire.go`:**
+```go
+// Step 1: Ganti handlers
+var HandlerProviders = wire.NewSet(
+    grpchandlers.NewUserHandler,     // HTTP → gRPC
+)
+
+// Step 2: Ganti transport
+var TransportProvider = grpctransport.NewGRPCServer  // HTTP → gRPC
+
+// Step 3: Update Application struct  
+type Application struct {
+    Server *grpctransport.Server  // Change type
+    Logger *zap.Logger
+}
+```
 
 #### Loader & Precedence
-- Precedence konfigurasi: flag CLI (`--stage`) > environment variables > file konfigurasi
+- Precedence konfigurasi: flag CLI (`--stage`) > environment variables > file konfigurasi  
 - Loader membentuk nama file berdasarkan nilai `--stage` (misal: `.env.stage.production`) dan memuatnya pada startup
 
 #### Rekomendasi Operasional
 - Pastikan `Makefile` dan dokumentasi memakai nama stage yang sama dengan file `.env.stage.*`
-- Mode dan stage bersifat orthogonal: panggil `--mode` untuk menentukan subsistem dan `--stage` untuk menentukan konfigurasi environment
+- Transport mode ditentukan otomatis dari wire.go configuration - seamless switching
 - Jangan commit `.env.stage.production` yang berisi secret; gunakan secret manager untuk produksi
 - Log level harus sesuai: `Info` untuk alur normal, `Error` untuk kegagalan
 
 ---
 
-## Dependency Injection dengan Wire
+## Dependency Injection dengan Wire (Architecture)
 
 Proyek ini menggunakan [Google Wire](https://github.com/google/wire) untuk dependency injection yang aman dan performant.
 
@@ -113,44 +161,85 @@ Proyek ini menggunakan [Google Wire](https://github.com/google/wire) untuk depen
 - **Explicit dependencies**: Dependency chain yang jelas dan mudah di-trace
 - **Easy testing**: Mudah untuk inject mock dependencies
 
-### Wire Structure
+### Wire Structure (Simplified)
 ```
-internal/wire/
-├── wire.go          # Definisi providers dan injectors
+internal/apps/
+├── wire.go          # PRIMARY FILE untuk semua provider configuration
 └── wire_gen.go      # Kode yang di-generate otomatis (JANGAN EDIT)
 ```
 
-### Provider Sets
-- **DatabaseSet**: Koneksi database MySQL
-- **ValidationSet**: Input validation
-- **LoggerSet**: Structured logging dengan Elasticsearch
-- **RepositorySet**: Semua repository implementations
-- **ServiceSet**: Business logic services
-- **HTTPSet**: HTTP server dengan routing
+### Provider Sets (Seamless)
+- **InfrastructureProviders**: Database, logging, utilities (foundation)
+- **RepositoryProviders**: All repository implementations
+- **ServiceProviders**: Business logic services
+- **HandlerProviders**: Handler layer (http/grpc/etc)
+- **TransportProvider**: Single variable untuk switch transport
 
-### Menggunakan Wire
+### Menambah Fitur - Edit wire.go Saja
 
-#### Generate kode Wire:
-```bash
-make wire
+#### 1. Tambah Repository:
+```go
+var RepositoryProviders = wire.NewSet(
+    repositories.NewExampleRepository,
+    repositories.NewUserRepository,
+    repositories.NewProductRepository,  // ← Add this
+)
 ```
 
-#### Menambah dependency baru:
-1. Buat provider function di package yang sesuai
-2. Tambahkan ke provider set di `internal/wire/wire.go`  
-3. Update service register jika perlu
-4. Jalankan `make wire` untuk regenerate
+#### 2. Tambah Service:
+```go
+var ServiceProviders = wire.NewSet(
+    services.NewExampleService,
+    services.NewHealthService,
+    services.NewProductService,  // ← Add this
+)
+```
 
-### Detail Documentation
-Lihat [WIRE.md](WIRE.md) untuk dokumentasi lengkap tentang penggunaan Wire.
+#### 3. Tambah Handler:
+```go
+var HandlerProviders = wire.NewSet(
+    handlers.NewExampleHandler,
+    handlers.NewHealthHandler,
+    handlers.NewProductHandler,  // ← Add this  
+)
+```
+
+#### 4. Generate Wire:
+```bash
+make wire  # Single command untuk regenerate semua
+```
+
+### Transport Switching (No Config Changes!)
+```go
+// Edit hanya wire.go untuk switch HTTP → gRPC
+var TransportProvider = grpctransport.NewGRPCServer  // was: httptransport.NewGinServer
+```
 
 ---
 
-## Testing
+## Quick Commands
 
-- Nama file test: `xxx_test.go`
-- Gunakan table-driven tests dan mock untuk dependencies
-- Untuk unit tests, mock external resources (DB, network) dan hanya tes logika bisnis
+```bash
+# Development
+go run ./cmd                    # Default
+go run ./cmd -stage=dev         # With stage
+
+# Testing
+go test ./...                   # All tests
+go test -cover ./...            # With coverage
+
+# Build & Deploy
+make build                      # Compile
+./tmp/main -stage=prod          # Run production
+
+# Wire generation
+make wire                       # After adding features
+```
+
+### Testing Guidelines
+- File test: `xxx_test.go`
+- Mock external resources (DB, network)
+- Table-driven tests preferred
 
 ---
 
@@ -221,127 +310,33 @@ Pastikan setiap commit dan branch mengikuti standar di atas untuk memudahkan tra
     - Hindari underscore di identifier publik
     - Gunakan `CamelCase` untuk exported names dan `camelCase` untuk private names
 
----
 
-## Penjelasan Makefile
-
-Makefile memudahkan developer menjalankan tugas umum. Target yang biasa ada:
-
-- `make build` : Compile binary (`go build ./...`)
-- `make run` : Jalankan aplikasi (`go run ./cmd/main`)
-- `make test` : Jalankan unit test (`go test ./...`)
 
 ---
 
-## Penjelasan File .env
+## Development & Deployment
 
-.env menyimpan variabel lingkungan lokal (development). Contoh:
-
-```env
-APP_ENV=development
-PORT=8080
-DB_DSN=user:pass@tcp(localhost:3306)/dbname
-```
-
-> **Jangan commit file `.env` berisi kredensial. Gunakan `.env.example` untuk contoh.**
-
-Ketika menjalankan aplikasi, flag `--stage` digunakan untuk memilih file yang sesuai. Contoh Makefile menjalankan aplikasi dengan flag:
-
+### Quick Start
 ```bash
-./cmd/$(BINARY_NAME) --mode http --stage prod
+# Default development
+go run ./cmd
+
+# Production stage
+go run ./cmd -stage=prod
 ```
 
-### Tips
-- Buat file `.env.example` atau `.env.stage.example` yang tidak berisi kredensial tapi menunjukkan variabel yang diperlukan
-- Jangan commit file `.env.stage.production` yang berisi secret; gunakan secret manager untuk produksi
-- Pastikan nilai `--stage` pada Makefile konsisten dengan nama file `.env.stage.*` yang Anda pakai
-
----
-
-## Mode dan Stage
-
-`--mode` dan `--stage` adalah flag runtime yang umum dipakai untuk memilih cara aplikasi berjalan dan konfigurasi environment.
-
-### 1. --mode
-- Menentukan subsistem yang dijalankan oleh binary
-- Nilai umum:
-  - `http` : Jalankan HTTP server (biasanya Gin). Ekspos REST/HTTP API
-  - `grpc` : Jalankan gRPC server (jika aplikasi mendukung gRPC)
-  - `worker` : Jalankan worker/consumer untuk background jobs (queue consumer, worker loop)
-  - `migrate` : Jalankan proses migrasi database dan keluar
-  - `cli` / `task` : Jalankan tugas CLI tertentu atau runner task
-- Setiap mode hanya menginisialisasi komponen yang diperlukan untuk fungsinya
-
-### 2. --stage
-- Memilih konfigurasi environment (lokal, development, staging, production)
-- Contoh nilai: `local`, `development`, `staging`, `production` (atau singkatan jika konsisten, misal `prod`)
-- Pengaruh: penentuan file env yang akan dimuat (`.env.stage.<stage>`), level logging default, koneksi ke resource berbeda (DB, queue), dan perilaku fitur (misal: feature flags)
-
-### 3. Kombinasi & Precedence
-- Mode menentukan subsistem; stage menentukan konfigurasi untuk subsistem tersebut
-- Precedence konfigurasi: flag CLI (`--stage`) > environment variables > file konfigurasi
-
-### 4. Praktik dan Rekomendasi
-- Gunakan nama stage yang konsisten dan deskriptif (`production` lebih disarankan daripada `prod` kecuali ada mapping jelas)
-- Pastikan Makefile dan dokumentasi memakai nama stage yang sama dengan file `.env.stage.*` di repo
-- Mode harus orthogonal terhadap stage: bisa menjalankan `--mode http --stage development` maupun `--mode worker --stage production`
-
-### 5. Contoh Perintah
-
-```bash
-# Jalankan HTTP server pada stage production
-./cmd/main --mode=http --stage=production
-
-# Jalankan migrasi pada stage staging
-./cmd/main --mode=migrate --stage=staging
-
-# Jalankan worker di environment development
-./cmd/main --mode=worker --stage=development
-```
-
-> **Catatan:** Pastikan loader environment Anda mencari file `.env.stage.<stage>` atau memetakan singkatan stage ke nama file yang sesuai
-
----
-
-## Penjelasan Config
-
-Config didefinisikan sebagai struct (misal: `configs.Config`) dan di-load dari file + environment variables (prioritas env > file)
-
-Contoh singkat:
-
+### Transport Switching (Wire-based)
+**Ubah transport hanya di `internal/apps/wire.go`:**
 ```go
-type Config struct {
-  AppName string
-  Port    int
-  DBDSN   string
-}
+// HTTP (default)  
+var TransportProvider = httptransport.NewGinServer
+
+// gRPC
+var TransportProvider = grpctransport.NewGRPCServer  
+
+// Worker/Queue  
+var TransportProvider = workertransport.NewWorker
 ```
 
----
-
-## Langkah Menjalankan Aplikasi Lokal
-
-1. Copy file environment contoh dan sesuaikan:
-   ```bash
-   cp .env.example .env.stage.local
-   # edit .env sesuai kebutuhan
-   ```
-2. Install dependensi dan build (Go modules):
-   ```bash
-   go mod tidy
-   make build
-   ```
-3. Jalankan aplikasi:
-   ```bash
-   make run
-   # atau
-   go run ./cmd/main --mode=http --stage=local
-   ```
-4. Menjalankan unit test:
-   ```bash
-   make test
-   # atau
-   go test ./... -v -coverprofile=coverage.out
-   ```
-
+**Jangan commit secrets!**
 
