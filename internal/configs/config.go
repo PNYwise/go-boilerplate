@@ -63,33 +63,16 @@ type Config struct {
 	GrpcAddr string
 }
 
-// MustLoad loads the configuration from environment variables and returns a Config instance.
-// It parses command-line flags for mode and stage, loads a dotenv file if present,
-// and validates the configuration based on the selected mode.
-// If any required fields are missing, it panics with an error message.
-func MustLoad(mode, stage string) Config {
+// MustLoad loads the configuration from environment variables (seamless, no mode required)
+func MustLoad(stage string) Config {
 	envFile := ".env"
 	if stage != "" {
 		envFile = fmt.Sprintf(".env.stage.%s", stage)
 	}
 	loadDotenvIfPresent(envFile)
 
-	// ---- 3) Build config from environment (with defaults) ----
+	// Build config from environment (with defaults)
 	cfg := Config{
-		Mode: mode,
-
-		// Rabbit defaults
-		// RabbitURL:         getenv("RABBIT_URL", "amqp://guest:guest@localhost:5672/"),
-		// RabbitExchange:    getenv("RABBIT_EXCHANGE", "app.events"),
-		// RabbitQueue:       getenv("RABBIT_QUEUE", "orders.q"),
-		// RabbitRoutingKeys: splitCSVDefault(getenv("RABBIT_ROUTING_KEYS", ""), []string{"dwh.*", "#"}),
-		// RabbitPrefetch:    getenvInt("RABBIT_PREFETCH", 16),
-
-		// RabbitRetryTTLMS:      getenvInt("RABBIT_RETRY_TTL_MS", 15000),
-		// RabbitMaxRedeliveries: getenvInt("RABBIT_MAX_REDELIVERIES", 5),
-		// RabbitDLX:             getenv("RABBIT_DLX", "app.dlx"),
-		// RabbitRetryExchange:   getenv("RABBIT_RETRY_EXCHANGE", "app.retry"),
-
 		// DB (optional)
 		DbUser:            getenv("DB_USER", ""),
 		DbPassword:        getenv("DB_PASSWORD", ""),
@@ -117,22 +100,10 @@ func MustLoad(mode, stage string) Config {
 		GrpcAddr: getenv("GRPC_ADDR", ":9090"),
 	}
 
-	switch cfg.Mode {
-	case "http":
-		requireNonEmpty("HTTP_ADDR", cfg.HTTPAddr)
-	case "rabbit":
-		requireNonEmpty("RABBIT_URL", cfg.RabbitURL)
-		requireNonEmpty("RABBIT_EXCHANGE", cfg.RabbitExchange)
-		requireNonEmpty("RABBIT_QUEUE", cfg.RabbitQueue)
-		if len(cfg.RabbitRoutingKeys) == 0 {
-			panic(fmt.Errorf("missing RABBIT_ROUTING_KEYS"))
-		}
-	default:
-		log.Printf("Unknown MODE=%q, falling back to MODE=http validation", cfg.Mode)
-		requireNonEmpty("HTTP_ADDR", cfg.HTTPAddr)
-	}
+	// Seamless validation - just ensure HTTP basics are set
+	requireNonEmpty("HTTP_ADDR", cfg.HTTPAddr)
 
-	log.Printf("config loaded: stage=%s mode=%s", stage, cfg.Mode)
+	log.Printf("config loaded: stage=%s", stage)
 
 	return cfg
 }

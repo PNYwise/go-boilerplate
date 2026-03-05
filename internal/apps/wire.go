@@ -3,24 +3,42 @@
 
 package apps
 
+// ===================================================================
+// DEVELOPER CUSTOMIZATION ZONE - MODIFY THIS FILE TO ADD FEATURES
+// ===================================================================
+//
+// This file is where you add:
+// - New repositories
+// - New services
+// - New handlers
+// - New providers
+//
+// When you want to switch to gRPC later:
+// 1. Replace HandlerProviders with gRPC handlers
+// 2. Replace TransportProvider with gRPC server
+// 3. Update Application struct
+//
+// DO NOT MODIFY: main.go, app.go
+// ===================================================================
+
 import (
-	"database/sql"
 	"go-boilerplate/internal/configs"
 	"go-boilerplate/internal/dbs"
 	"go-boilerplate/internal/repositories"
 	"go-boilerplate/internal/services"
 
-	// grpchandlers "go-boilerplate/internal/transports/grpc/handlers"
-	// grpctransport "go-boilerplate/internal/transports/grpc"
 	httptransport "go-boilerplate/internal/transports/http"
 	httphandlers "go-boilerplate/internal/transports/http/handlers"
 	"go-boilerplate/internal/utils/logs"
 	"go-boilerplate/internal/utils/validation"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/google/wire"
 	"go.uber.org/zap"
 )
+
+// ===================================================================
+// INFRASTRUCTURE PROVIDERS - Add core dependencies here
+// ===================================================================
 
 var InfrastructureProviders = wire.NewSet(
 	// Database connection
@@ -31,147 +49,106 @@ var InfrastructureProviders = wire.NewSet(
 
 	// Input validation
 	validation.GetValidator,
+
+	// Add more infrastructure providers here:
+	// redis.NewRedisClient,
+	// queue.NewRabbitMQClient,
+	// cache.NewCacheProvider,
 )
 
-// Add your repositories here - they handle database operations
+// ===================================================================
+// REPOSITORY PROVIDERS - Add your data access layer here
+// ===================================================================
+
 var RepositoryProviders = wire.NewSet(
 	repositories.NewExampleRepository,
 	repositories.NewUserRepository,
-	// ......
+
+	// Add new repositories here:
+	// repositories.NewProductRepository,
+	// repositories.NewOrderRepository,
 )
 
-// Add your services here - they contain your business rules
+// ===================================================================
+// SERVICE PROVIDERS - Add your business logic layer here
+// ===================================================================
+
 var ServiceProviders = wire.NewSet(
 	services.NewExampleService,
 	services.NewHealthService,
 	services.NewUserService,
-	// ....
+
+	// Add new services here:
+	// services.NewProductService,
+	// services.NewOrderService,
+	// services.NewAuthService,
 )
 
-// Add HTTP handlers here - they handle HTTP requests/responses
-var HTTPHandlerProviders = wire.NewSet(
+// ===================================================================
+// HANDLER PROVIDERS - Current: HTTP (Change this when switching transport)
+// ===================================================================
+
+var HandlerProviders = wire.NewSet(
 	httphandlers.NewExampleHandler,
 	httphandlers.NewHealthHandler,
 	httphandlers.NewUserHandler,
-	// 📝 TO ADD NEW HTTP HANDLER: httphandlers.NewYourHandler,
+
+	// Add new handlers here:
+	// httphandlers.NewProductHandler,
+	// httphandlers.NewAuthHandler,
 )
 
-// These start the actual servers (HTTP, gRPC, etc.)
-var ServerProviders = wire.NewSet(
-	httptransport.NewHTTPServer,
-	// grpctransport.NewGRPCServer,
-)
+// Future gRPC example:
+// var HandlerProviders = wire.NewSet(
+//     grpchandlers.NewExampleHandler,
+//     grpchandlers.NewUserHandler,
+// )
 
-// Application represents the complete wired application
+// ===================================================================
+// TRANSPORT PROVIDER - Current: HTTP Server (Change this when switching)
+// ===================================================================
+
+var TransportProvider = httptransport.NewHTTPServer
+
+// Future gRPC example:
+// var TransportProvider = grpctransport.NewGRPCServer
+
+// Future RabbitMQ example:
+// var TransportProvider = rmqtransport.NewRabbitMQConsumer
+// ===================================================================
+// APPLICATION STRUCTURE
+// ===================================================================
+
+// Application holds the main application server
 type Application struct {
-	// Infrastructure
-	DB        *sql.DB             // Database connection
-	Logger    *zap.Logger         // Logger instance
-	Validator *validator.Validate // Input validator
-
-	// Services (Business Logic)
-	ExampleService services.ExampleService
-	HealthService  services.HealthService
-	UserService    services.UserService
-
-	// Transport Servers
-	HTTPServer *httptransport.Server
+	Server *httptransport.Server // Change type when switching transport
+	Logger *zap.Logger
 }
 
-// NewApplication creates a new application with all dependencies wired
+// NewApplication creates a new Application
 func NewApplication(
-	// Infrastructure
-	db *sql.DB,
+	server *httptransport.Server, // Change type when switching transport
 	logger *zap.Logger,
-	validator *validator.Validate,
-	// Services
-	exampleService services.ExampleService,
-	healthService services.HealthService,
-	userService services.UserService,
-	// Servers
-	httpServer *httptransport.Server,
 ) *Application {
 	return &Application{
-		DB:             db,
-		Logger:         logger,
-		Validator:      validator,
-		ExampleService: exampleService,
-		HealthService:  healthService,
-		UserService:    userService,
-		HTTPServer:     httpServer,
+		Server: server,
+		Logger: logger,
 	}
 }
 
-// =============================================================================
-// WIRE INJECTORS - These create the actual instances
-// =============================================================================
+// ===================================================================
+// WIRE GENERATION - Single, Simple Builder
+// ===================================================================
 
-// InitializeApp creates the complete application with all dependencies
+// InitializeApp creates the application with all dependencies
 func InitializeApp(cfg configs.Config) (*Application, func(), error) {
 	wire.Build(
-		// Combine all provider sets
 		InfrastructureProviders,
 		RepositoryProviders,
 		ServiceProviders,
-		HTTPHandlerProviders,
-		// GRPCHandlerProviders,
-		ServerProviders,
-
-		// Final assembly
+		HandlerProviders,
+		TransportProvider,
 		NewApplication,
 	)
 	return nil, nil, nil
 }
-
-// InitializeHTTPApp creates application optimized for HTTP only
-func InitializeHTTPApp(cfg configs.Config) (*httptransport.Server, func(), error) {
-	wire.Build(
-		InfrastructureProviders,
-		RepositoryProviders,
-		ServiceProviders,
-		HTTPHandlerProviders,
-		ServerProviders,
-	)
-	return nil, nil, nil
-}
-
-// InitializeGRPCApp creates application optimized for gRPC only
-// func InitializeGRPCApp(cfg configs.Config) (*grpctransport.Server, func(), error) {
-// 	wire.Build(
-// 		InfrastructureProviders,
-// 		RepositoryProviders,
-// 		ServiceProviders,
-// 		GRPCHandlerProviders,
-// 		ServerProviders,
-// 	)
-// 	return nil, nil, nil
-// }
-
-// =============================================================================
-// 📖 HOW TO ADD NEW COMPONENTS:
-// =============================================================================
-//
-// 🆕 Adding a new Repository:
-// 1. Create: internal/repositories/your_repository.go
-// 2. Add: repositories.NewYourRepository to RepositoryProviders
-// 3. Run: make wire
-//
-// 🆕 Adding a new Service:
-// 1. Create: internal/services/your_service.go
-// 2. Add: services.NewYourService to ServiceProviders
-// 3. Add: yourService services.YourService to Application struct
-// 4. Add parameter to NewApplication function
-// 5. Run: make wire
-//
-// 🆕 Adding a new HTTP Handler:
-// 1. Create: internal/transports/http/handlers/your_handler.go
-// 2. Add: httphandlers.NewYourHandler to HTTPHandlerProviders
-// 3. Run: make wire
-//
-// 🆕 Adding a new gRPC Handler:
-// 1. Create: internal/transports/grpc/handlers/your_handler.go
-// 2. Add: grpchandlers.NewYourHandler to GRPCHandlerProviders
-// 3. Run: make wire
-//
-// That's it! Wire will automatically resolve all dependencies! 🎉
-// =============================================================================

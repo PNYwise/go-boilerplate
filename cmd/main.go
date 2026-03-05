@@ -11,66 +11,77 @@ import (
 	"strings"
 	"syscall"
 
-	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/go-sql-driver/mysql" // Database driver
 	"go.uber.org/zap"
 )
 
+// main bootstraps the application - DO NOT MODIFY
+// All customization should happen in internal/apps/wire.go
 func main() {
-	// Parse command-line arguments
-	modeFlag := flag.String("mode", "", "application mode: http, grpc, rabbit")
+	defer handlePanic()
+
+	cfg := loadConfig()
+	app := createApp(cfg)
+	defer app.Shutdown()
+
+	runApp(app)
+}
+
+// handlePanic provides top-level panic recovery - DO NOT MODIFY
+func handlePanic() {
+	if r := recover(); r != nil {
+		fmt.Printf("Application crashed with panic: %v\n", r)
+		os.Exit(1)
+	}
+}
+
+// loadConfig loads application configuration - DO NOT MODIFY
+func loadConfig() configs.Config {
 	stageFlag := flag.String("stage", "", "stage name: dev, staging, prod, etc.")
 	flag.Parse()
 
-	// Determine mode (CLI flag -> ENV var -> default)
-	mode := strings.ToLower(strings.TrimSpace(*modeFlag))
-	if mode == "" {
-		mode = strings.ToLower(strings.TrimSpace(os.Getenv("MODE")))
-	}
-	if mode == "" {
-		mode = "http" // default
-	}
+	stage := getStage(*stageFlag)
 
-	// Determine stage (CLI flag -> ENV var)
-	stage := strings.TrimSpace(*stageFlag)
-	if stage == "" {
-		stage = strings.TrimSpace(os.Getenv("STAGE"))
-	}
+	// Seamless - no mode needed, just load config
+	return configs.MustLoad(stage)
+}
 
-	// Load configuration
-	cfg := configs.MustLoad(mode, stage)
-
-	// Create application instance with all dependencies wired
+// createApp creates the application instance - DO NOT MODIFY
+func createApp(cfg configs.Config) *apps.App {
 	app, err := apps.New(cfg)
 	if err != nil {
 		fmt.Printf("Failed to create application: %v\n", err)
 		os.Exit(1)
 	}
-	defer app.Shutdown()
+	return app
+}
 
-	// Setup graceful shutdown
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+// runApp runs the application with graceful shutdown - DO NOT MODIFY
+func runApp(app *apps.App) {
+	ctx, cancel := signal.NotifyContext(context.Background(),
+		syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGHUP)
 	defer cancel()
 
-	// Convert string mode to apps.Mode
-	var appMode apps.Mode
-	switch mode {
-	case "http":
-		appMode = apps.ModeHTTP
-	case "grpc":
-		appMode = apps.ModeGRPC
-	case "rabbit":
-		appMode = apps.ModeRabbit
-	default:
-		fmt.Printf("Unknown mode: %s\n", mode)
+	fmt.Println("Starting HTTP server")
+	fmt.Println("Press Ctrl+C to stop gracefully")
+
+	if err := app.Run(ctx); err != nil {
+		if logger := app.GetLogger(); logger != nil {
+			logger.Error("Application failed", zap.Error(err))
+		}
+		fmt.Printf("Application failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Run the application
-	fmt.Printf("🚀 Starting application in %s mode\n", mode)
-	if err := app.Run(ctx, appMode); err != nil {
-		app.GetLogger().Error("Application failed",
-			zap.String("mode", mode),
-			zap.Error(err))
-		os.Exit(1)
+	fmt.Println("Application stopped")
+}
+
+// Helper functions - DO NOT MODIFY
+
+func getStage(flag string) string {
+	stage := strings.TrimSpace(flag)
+	if stage == "" {
+		stage = strings.TrimSpace(os.Getenv("STAGE"))
 	}
+	return stage
 }

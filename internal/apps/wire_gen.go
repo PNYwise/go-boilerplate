@@ -7,8 +7,6 @@
 package apps
 
 import (
-	"database/sql"
-	"github.com/go-playground/validator/v10"
 	"github.com/google/wire"
 	"go-boilerplate/internal/configs"
 	"go-boilerplate/internal/dbs"
@@ -23,41 +21,16 @@ import (
 
 // Injectors from wire.go:
 
-// InitializeApp creates the complete application with all dependencies
+// InitializeApp creates the application with all dependencies
 func InitializeApp(cfg configs.Config) (*Application, func(), error) {
-	db, err := dbs.NewMySQLDB(cfg)
+	db, cleanup, err := dbs.NewMySQLDB(cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	logger, cleanup, err := logs.ProvideLogger(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	validate := validation.GetValidator()
 	exampleRepository := repositories.NewExampleRepository(db)
-	exampleService := services.NewExampleService(exampleRepository, logger, cfg, validate)
-	healthService := services.NewHealthService(cfg, logger, validate)
-	userRepository := repositories.NewUserRepository(db)
-	userService := services.NewUserService(userRepository, cfg, logger, validate)
-	exampleHandler := handlers.NewExampleHandler(exampleService)
-	healthHandler := handlers.NewHealthHandler(healthService)
-	userHandler := handlers.NewUserHandler(userService)
-	server := http.NewHTTPServer(exampleHandler, healthHandler, userHandler, cfg)
-	application := NewApplication(db, logger, validate, exampleService, healthService, userService, server)
-	return application, func() {
+	logger, cleanup2, err := logs.ProvideLogger(cfg)
+	if err != nil {
 		cleanup()
-	}, nil
-}
-
-// InitializeHTTPApp creates application optimized for HTTP only
-func InitializeHTTPApp(cfg configs.Config) (*http.Server, func(), error) {
-	db, err := dbs.NewMySQLDB(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	exampleRepository := repositories.NewExampleRepository(db)
-	logger, cleanup, err := logs.ProvideLogger(cfg)
-	if err != nil {
 		return nil, nil, err
 	}
 	validate := validation.GetValidator()
@@ -69,7 +42,9 @@ func InitializeHTTPApp(cfg configs.Config) (*http.Server, func(), error) {
 	userService := services.NewUserService(userRepository, cfg, logger, validate)
 	userHandler := handlers.NewUserHandler(userService)
 	server := http.NewHTTPServer(exampleHandler, healthHandler, userHandler, cfg)
-	return server, func() {
+	application := NewApplication(server, logger)
+	return application, func() {
+		cleanup2()
 		cleanup()
 	}, nil
 }
@@ -78,53 +53,27 @@ func InitializeHTTPApp(cfg configs.Config) (*http.Server, func(), error) {
 
 var InfrastructureProviders = wire.NewSet(dbs.NewMySQLDB, logs.ProvideLogger, validation.GetValidator)
 
-// Add your repositories here - they handle database operations
 var RepositoryProviders = wire.NewSet(repositories.NewExampleRepository, repositories.NewUserRepository)
 
-// Add your services here - they contain your business rules
 var ServiceProviders = wire.NewSet(services.NewExampleService, services.NewHealthService, services.NewUserService)
 
-// Add HTTP handlers here - they handle HTTP requests/responses
-var HTTPHandlerProviders = wire.NewSet(handlers.NewExampleHandler, handlers.NewHealthHandler, handlers.NewUserHandler)
+var HandlerProviders = wire.NewSet(handlers.NewExampleHandler, handlers.NewHealthHandler, handlers.NewUserHandler)
 
-// These start the actual servers (HTTP, gRPC, etc.)
-var ServerProviders = wire.NewSet(http.NewHTTPServer)
+var TransportProvider = http.NewHTTPServer
 
-// Application represents the complete wired application
+// Application holds the main application server
 type Application struct {
-	// Infrastructure
-	DB        *sql.DB             // Database connection
-	Logger    *zap.Logger         // Logger instance
-	Validator *validator.Validate // Input validator
-
-	// Services (Business Logic)
-	ExampleService services.ExampleService
-	HealthService  services.HealthService
-	UserService    services.UserService
-
-	// Transport Servers
-	HTTPServer *http.Server
+	Server *http.Server // Change type when switching transport
+	Logger *zap.Logger
 }
 
-// NewApplication creates a new application with all dependencies wired
+// NewApplication creates a new Application
 func NewApplication(
-
-	db *sql.DB,
-	logger *zap.Logger, validator2 *validator.Validate,
-
-	exampleService services.ExampleService,
-	healthService services.HealthService,
-	userService services.UserService,
-
-	httpServer *http.Server,
+	server *http.Server,
+	logger *zap.Logger,
 ) *Application {
 	return &Application{
-		DB:             db,
-		Logger:         logger,
-		Validator:      validator2,
-		ExampleService: exampleService,
-		HealthService:  healthService,
-		UserService:    userService,
-		HTTPServer:     httpServer,
+		Server: server,
+		Logger: logger,
 	}
 }

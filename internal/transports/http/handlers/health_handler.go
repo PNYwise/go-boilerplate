@@ -29,3 +29,9 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 	status := h.healthSrv.GetStatus(c.Request.Context())
 	c.JSON(http.StatusOK, status)
 }
+
+// TestCrash handles GET /test-crash requests - for testing panic recovery
+func (h *HealthHandler) TestCrash(c *gin.Context) {
+	// This will trigger a panic to test our crash recovery
+	panic("intentional panic for testing crash recovery")
+}

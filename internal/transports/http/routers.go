@@ -21,6 +21,7 @@ func RegisterRoutes(
 
 	// Health routes (no auth required)
 	r.GET("/health", healthHandler.HealthCheck)
+	r.GET("/test-crash", healthHandler.TestCrash) // For testing crash recovery
 
 	// API v1 routes
 	v1 := r.Group("/api/v1")

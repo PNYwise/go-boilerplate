@@ -117,19 +117,36 @@ func (b *bulkSink) flush() {
 	b.buf.Reset()
 	b.mu.Unlock()
 
+	// Use a timeout context to avoid hanging during shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	req := esapi.BulkRequest{Body: bytes.NewReader(payload)}
-	res, err := req.Do(b.ctx, b.cli)
-	if err == nil {
+	res, err := req.Do(ctx, b.cli)
+	if err == nil && res != nil {
 		res.Body.Close()
 	}
 }
 
-func (b *bulkSink) Stop() { b.cancel() }
+func (b *bulkSink) Stop() {
+	// Cancel context to stop the loop
+	b.cancel()
+
+	// Final flush with timeout to ensure data is sent
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Ignore panics during shutdown flush
+			}
+		}()
+		b.flush()
+	}()
+}
 
 type elasticCore struct {
-	enc  zapcore.Encoder
-	sink *bulkSink
-	lvl  zapcore.LevelEnabler
+	enc        zapcore.Encoder
+	sink       *bulkSink
+	lvl        zapcore.LevelEnabler
 	withFields []zapcore.Field
 }
 
@@ -269,12 +286,38 @@ func NewWithElastic(serviceName string, tzName string, es ESOpts) (*zap.Logger, 
 }
 
 // ProvideLogger provides a zap logger for Wire dependency injection
+// It uses the configuration to set up Elasticsearch logging if enabled
+// Returns the logger and a cleanup function that should be called on shutdown
 func ProvideLogger(cfg configs.Config) (*zap.Logger, func(), error) {
-	// Simple development logger - you can enhance this to use config values
-	logger, err := zap.NewDevelopment()
+	// Create Elasticsearch options from config
+	esOpts := ESOpts{
+		Enabled:       cfg.ElasticEnabled,
+		Addresses:     cfg.ElasticAddresses,
+		Index:         cfg.ElasticIndex,
+		APIKey:        cfg.ElasticAPIKey,
+		Username:      cfg.ElasticUsername,
+		Password:      cfg.ElasticPassword,
+		FlushBytes:    cfg.ElasticBulkFlushBytes,
+		FlushInterval: time.Duration(cfg.ElasticBulkFlushIntervalMS) * time.Millisecond,
+	}
+
+	// Use the service name from config, fallback to "app" if not set
+	serviceName := cfg.AppName
+	if serviceName == "" {
+		serviceName = "app"
+	}
+
+	// Create logger with Elasticsearch support
+	logger, stopper, err := NewWithElastic(serviceName, "UTC", esOpts)
 	if err != nil {
 		return nil, nil, err
 	}
-	
-	return logger, func() { _ = logger.Sync() }, nil
+
+	// Return logger and cleanup function that syncs and stops ES sink
+	cleanup := func() {
+		_ = logger.Sync()
+		stopper()
+	}
+
+	return logger, cleanup, nil
 }
