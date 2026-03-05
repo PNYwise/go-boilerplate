@@ -6,9 +6,10 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
+pre_cmd = ["make wire"]
 cmd = "go build -o ./tmp/main ./cmd/main.go"
 
-full_bin = "tmp/main --mode http --stage dev"
+full_bin = "tmp/main --stage dev"
 
 # Watch these file extensions.
 include_ext = ["go"]

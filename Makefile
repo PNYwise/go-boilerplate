@@ -31,6 +31,8 @@ help: ## ✨ Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 build: ## 📦 Build the application binary
+	@$(MAKE) clean
+	@$(MAKE) wire
 	@echo "Building binary..."
 	@$(GO) build $(LDFLAGS) -o ./cmd/$(BINARY_NAME) $(CMD_PATH)
 	@echo "Binary created at cmd/$(BINARY_NAME)"
@@ -58,9 +60,10 @@ local: ## 🚀 Run the application in local mode (with hot-reload)
 	@echo "Install with: go install github.com/air-verse/air@latest"
 	@air -c .air.local.toml
 
-prod: build ## ⚙️  Run the application in production mode
+prod: ## ⚙️  Run the application in production mode
+	@$(MAKE) build
 	@echo "Starting application in production mode..."
-	@./cmd/$(BINARY_NAME) --mode http --stage prod
+	@./cmd/$(BINARY_NAME) --stage prod
 
 clean: ## 🧹 Remove build artifacts
 	@echo "Cleaning up..."
