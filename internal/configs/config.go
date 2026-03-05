@@ -45,6 +45,11 @@ type Config struct {
 	DbMaxIdleConns    int
 	DbConnMaxLifetime int
 
+	// DB Connection Timeouts
+	DbTimeout      int // seconds
+	DbReadTimeout  int // seconds
+	DbWriteTimeout int // seconds
+
 	// Elastic (optional)
 	ElasticEnabled             bool
 	ElasticAddresses           []string
@@ -82,6 +87,11 @@ func MustLoad(stage string) Config {
 		DbMaxOpenConns:    getenvInt("DB_MAX_OPEN_CONNS", 0),
 		DbMaxIdleConns:    getenvInt("DB_MAX_IDLE_CONNS", 0),
 		DbConnMaxLifetime: getenvInt("DB_CONN_MAX_LIFETIME_MIN", 0),
+
+		// DB Connection Timeouts (default 5 seconds each)
+		DbTimeout:      getenvInt("DB_TIMEOUT", 5),
+		DbReadTimeout:  getenvInt("DB_READ_TIMEOUT", 5),
+		DbWriteTimeout: getenvInt("DB_WRITE_TIMEOUT", 5),
 
 		// Elastic (optional)
 		ElasticEnabled:             getenvBool("ELASTIC_ENABLED", false),

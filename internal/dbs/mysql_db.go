@@ -16,8 +16,9 @@ import (
 // The cleanup function should be called to properly close the database connection.
 func NewMySQLDB(cfg configs.Config) (*sql.DB, func(), error) {
 	// Add timeouts & parseTime
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&timeout=5s&readTimeout=5s&writeTimeout=5s",
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&timeout=%ds&readTimeout=%ds&writeTimeout=%ds",
 		cfg.DbUser, cfg.DbPassword, cfg.DbHost, cfg.DbPort, cfg.DbName,
+		cfg.DbTimeout, cfg.DbReadTimeout, cfg.DbWriteTimeout,
 	)
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
