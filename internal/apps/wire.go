@@ -61,7 +61,6 @@ var InfrastructureProviders = wire.NewSet(
 // ===================================================================
 
 var RepositoryProviders = wire.NewSet(
-	repositories.NewExampleRepository,
 	repositories.NewUserRepository,
 
 	// Add new repositories here:
@@ -74,7 +73,6 @@ var RepositoryProviders = wire.NewSet(
 // ===================================================================
 
 var ServiceProviders = wire.NewSet(
-	services.NewExampleService,
 	services.NewHealthService,
 	services.NewUserService,
 
@@ -89,7 +87,6 @@ var ServiceProviders = wire.NewSet(
 // ===================================================================
 
 var HandlerProviders = wire.NewSet(
-	httphandlers.NewExampleHandler,
 	httphandlers.NewHealthHandler,
 	httphandlers.NewUserHandler,
 

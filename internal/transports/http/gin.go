@@ -4,6 +4,7 @@ import (
 	"context"
 	"go-boilerplate/internal/configs"
 	"go-boilerplate/internal/transports/http/handlers"
+	"go-boilerplate/internal/transports/http/routers"
 	"net/http"
 	"time"
 
@@ -23,7 +24,6 @@ type Server struct {
 // The server is ready to handle incoming HTTP requests.
 // The health check route is also defined here for basic server health monitoring.
 func NewHTTPServer(
-	exampleHandler *handlers.ExampleHandler,
 	healthHandler *handlers.HealthHandler,
 	userHandler *handlers.UserHandler,
 	cfg configs.Config,
@@ -37,7 +37,8 @@ func NewHTTPServer(
 	})
 
 	// Load application routes
-	RegisterRoutes(r, exampleHandler, healthHandler, userHandler, cfg)
+	routers.RegisterUserRoutes(r, userHandler, cfg)
+	routers.RegisterHealthRoutes(r, healthHandler, cfg)
 
 	return &Server{eng: r}
 }
