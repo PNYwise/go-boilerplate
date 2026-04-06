@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"go-boilerplate/internal/services"
+	"go-boilerplate/internal/utils/logs"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // HealthHandler handles health check requests
@@ -21,12 +23,22 @@ func NewHealthHandler(healthSrv services.HealthService) *HealthHandler {
 
 // HealthCheck handles GET /health requests
 func (h *HealthHandler) HealthCheck(c *gin.Context) {
-	if err := h.healthSrv.Check(c.Request.Context()); err != nil {
+	ctx := c.Request.Context()
+
+	logs.LogInfo(ctx, "Health check request received")
+
+	if err := h.healthSrv.Check(ctx); err != nil {
+		logs.LogError(ctx, err, "Health check failed")
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
 
-	status := h.healthSrv.GetStatus(c.Request.Context())
+	status := h.healthSrv.GetStatus(ctx)
+
+	logs.LogInfo(ctx, "Health check completed successfully",
+		attribute.String("status", "ok"),
+	)
+
 	c.JSON(http.StatusOK, status)
 }
 

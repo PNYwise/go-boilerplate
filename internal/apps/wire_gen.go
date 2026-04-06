@@ -14,66 +14,52 @@ import (
 	"go-boilerplate/internal/services"
 	"go-boilerplate/internal/transports/http"
 	"go-boilerplate/internal/transports/http/handlers"
-	"go-boilerplate/internal/utils/logs"
 	"go-boilerplate/internal/utils/validation"
-	"go.uber.org/zap"
 )
 
 // Injectors from wire.go:
 
 // InitializeApp creates the application with all dependencies
 func InitializeApp(cfg configs.Config) (*Application, func(), error) {
+	validate := validation.GetValidator()
+	healthService := services.NewHealthService(cfg, validate)
+	healthHandler := handlers.NewHealthHandler(healthService)
 	db, cleanup, err := dbs.NewMySQLDB(cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	exampleRepository := repositories.NewExampleRepository(db)
-	logger, cleanup2, err := logs.ProvideLogger(cfg)
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
-	validate := validation.GetValidator()
-	exampleService := services.NewExampleService(exampleRepository, logger, cfg, validate)
-	exampleHandler := handlers.NewExampleHandler(exampleService)
-	healthService := services.NewHealthService(cfg, logger, validate)
-	healthHandler := handlers.NewHealthHandler(healthService)
 	userRepository := repositories.NewUserRepository(db)
-	userService := services.NewUserService(userRepository, cfg, logger, validate)
+	userService := services.NewUserService(userRepository, cfg, validate)
 	userHandler := handlers.NewUserHandler(userService)
-	server := http.NewHTTPServer(exampleHandler, healthHandler, userHandler, cfg)
-	application := NewApplication(server, logger)
+	server := http.NewHTTPServer(healthHandler, userHandler, cfg)
+	application := NewApplication(server)
 	return application, func() {
-		cleanup2()
 		cleanup()
 	}, nil
 }
 
 // wire.go:
 
-var InfrastructureProviders = wire.NewSet(dbs.NewMySQLDB, logs.ProvideLogger, validation.GetValidator)
+var InfrastructureProviders = wire.NewSet(dbs.NewMySQLDB, validation.GetValidator)
 
-var RepositoryProviders = wire.NewSet(repositories.NewExampleRepository, repositories.NewUserRepository)
+var RepositoryProviders = wire.NewSet(repositories.NewUserRepository)
 
-var ServiceProviders = wire.NewSet(services.NewExampleService, services.NewHealthService, services.NewUserService)
+var ServiceProviders = wire.NewSet(services.NewHealthService, services.NewUserService)
 
-var HandlerProviders = wire.NewSet(handlers.NewExampleHandler, handlers.NewHealthHandler, handlers.NewUserHandler)
+var HandlerProviders = wire.NewSet(handlers.NewHealthHandler, handlers.NewUserHandler)
 
 var TransportProvider = http.NewHTTPServer
 
 // Application holds the main application server
 type Application struct {
 	Server *http.Server // Change type when switching transport
-	Logger *zap.Logger
 }
 
 // NewApplication creates a new Application
 func NewApplication(
 	server *http.Server,
-	logger *zap.Logger,
 ) *Application {
 	return &Application{
 		Server: server,
-		Logger: logger,
 	}
 }

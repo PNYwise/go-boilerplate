@@ -29,11 +29,9 @@ import (
 
 	httptransport "go-boilerplate/internal/transports/http"
 	httphandlers "go-boilerplate/internal/transports/http/handlers"
-	"go-boilerplate/internal/utils/logs"
 	"go-boilerplate/internal/utils/validation"
 
 	"github.com/google/wire"
-	"go.uber.org/zap"
 )
 
 // ===================================================================
@@ -41,11 +39,8 @@ import (
 // ===================================================================
 
 var InfrastructureProviders = wire.NewSet(
-	// Database connection
+	// Database connection with OpenTelemetry instrumentation
 	dbs.NewMySQLDB,
-
-	// Logger with Elasticsearch support
-	logs.ProvideLogger,
 
 	// Input validation
 	validation.GetValidator,
@@ -119,17 +114,14 @@ var TransportProvider = httptransport.NewHTTPServer
 // Application holds the main application server
 type Application struct {
 	Server *httptransport.Server // Change type when switching transport
-	Logger *zap.Logger
 }
 
 // NewApplication creates a new Application
 func NewApplication(
 	server *httptransport.Server, // Change type when switching transport
-	logger *zap.Logger,
 ) *Application {
 	return &Application{
 		Server: server,
-		Logger: logger,
 	}
 }
 

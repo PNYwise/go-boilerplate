@@ -135,7 +135,6 @@ var TransportProvider = grpctransport.NewGRPCServer  // HTTP → gRPC
 // Step 3: Update Application struct  
 type Application struct {
     Server *grpctransport.Server  // Change type
-    Logger *zap.Logger
 }
 ```
 

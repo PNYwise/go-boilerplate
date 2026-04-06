@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 // Server holds the Gin engine and services for the HTTP server.
@@ -19,16 +20,20 @@ type Server struct {
 	eng *gin.Engine
 }
 
-// NewHTTPServer initializes a new HTTP server with the provided handlers.
-// It sets up the Gin engine, applies middleware, and registers routes.
-// The server is ready to handle incoming HTTP requests.
-// The health check route is also defined here for basic server health monitoring.
+// NewHTTPServer initializes a new HTTP server with OpenTelemetry instrumentation.
+// It sets up the Gin engine with automatic request tracing, applies middleware, and registers routes.
+// All HTTP requests are automatically traced and metrics are collected for observability.
 func NewHTTPServer(
 	healthHandler *handlers.HealthHandler,
 	userHandler *handlers.UserHandler,
 	cfg configs.Config,
 ) *Server {
 	r := gin.New()
+
+	// Add OpenTelemetry middleware for automatic request tracing
+	r.Use(otelgin.Middleware(cfg.AppName))
+
+	// Standard middleware
 	r.Use(gin.Recovery())
 
 	// Health route stays here

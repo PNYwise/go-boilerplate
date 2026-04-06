@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 	"go-boilerplate/internal/configs"
-
-	"go.uber.org/zap"
+	"go-boilerplate/internal/utils/logs"
 )
 
 // App represents the core application - DO NOT MODIFY
@@ -13,43 +12,50 @@ import (
 type App struct {
 	application *Application
 	cleanup     func()
-	logger      *zap.Logger
 	config      configs.Config
 }
 
 // New creates a new App instance - DO NOT MODIFY
 // Use wire.go to customize application dependencies
 func New(cfg configs.Config) (*App, error) {
+	// Initialize OpenTelemetry first
+	otelCleanup, err := logs.InitializeOpenTelemetry(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize OpenTelemetry: %w", err)
+	}
+
 	application, cleanup, err := InitializeApp(cfg)
 	if err != nil {
 		if cleanup != nil {
 			cleanup()
 		}
+		otelCleanup() // Clean up OpenTelemetry on failure
 		return nil, fmt.Errorf("failed to initialize application: %w", err)
+	}
+
+	// Combine cleanup functions
+	combinedCleanup := func() {
+		if cleanup != nil {
+			cleanup()
+		}
+		otelCleanup()
 	}
 
 	return &App{
 		application: application,
-		cleanup:     cleanup,
-		logger:      application.Logger,
+		cleanup:     combinedCleanup,
 		config:      cfg,
 	}, nil
 }
 
 // Run starts the application - DO NOT MODIFY
-func (a *App) Run(ctx context.Context) (err error) {
+func (a *App) Run(ctx context.Context) error {
 	// Panic recovery to ensure cleanup happens
 	defer func() {
 		if r := recover(); r != nil {
-			if a.logger != nil {
-				a.logger.Error("Application panicked", zap.Any("panic", r))
-			}
 			a.ShutdownWithPanic()
-			err = fmt.Errorf("application panicked: %v", r)
 		}
 	}()
-
-	a.logger.Info("Starting application server", zap.String("address", a.config.HTTPAddr))
 
 	return a.application.Server.Run(ctx, a.config.HTTPAddr)
 }
@@ -64,35 +70,20 @@ func (a *App) ShutdownWithPanic() {
 	a.shutdown(true)
 }
 
-// GetLogger returns the application logger - DO NOT MODIFY
-func (a *App) GetLogger() *zap.Logger {
-	return a.logger
-}
-
 // shutdown handles the actual shutdown process - DO NOT MODIFY
 func (a *App) shutdown(fromPanic bool) {
-	if fromPanic {
-		if a.logger != nil {
-			a.logger.Error("Application shutting down due to panic, cleaning up resources")
-		}
-	} else {
-		if a.logger != nil {
-			a.logger.Info("Application shutting down gracefully")
-		}
-	}
-
 	// Always attempt cleanup, even if one fails
 	defer func() {
-		if r := recover(); r != nil && a.logger != nil {
-			a.logger.Error("Panic during shutdown cleanup", zap.Any("panic", r))
+		if r := recover(); r != nil {
+			// Handle panic during shutdown
 		}
 	}()
 
 	if a.cleanup != nil {
 		func() {
 			defer func() {
-				if r := recover(); r != nil && a.logger != nil {
-					a.logger.Error("Panic during cleanup function", zap.Any("panic", r))
+				if r := recover(); r != nil {
+					// Handle panic during cleanup
 				}
 			}()
 			a.cleanup()
@@ -103,22 +94,11 @@ func (a *App) shutdown(fromPanic bool) {
 	if a.application != nil && a.application.Server != nil {
 		func() {
 			defer func() {
-				if r := recover(); r != nil && a.logger != nil {
-					a.logger.Error("Panic during server shutdown", zap.Any("panic", r))
+				if r := recover(); r != nil {
+					// Handle panic during server shutdown
 				}
 			}()
 			// Server shutdown handled by context cancellation in Run method
-		}()
-	}
-
-	if a.logger != nil {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					// Can't log this since logger sync failed
-				}
-			}()
-			_ = a.logger.Sync()
 		}()
 	}
 }

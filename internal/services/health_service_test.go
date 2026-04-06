@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/go-playground/validator/v10"
-	"go.uber.org/zap"
 )
 
 func TestHealthService(t *testing.T) {
@@ -16,10 +15,9 @@ func TestHealthService(t *testing.T) {
 		AppName: "test-app",
 	}
 
-	logger, _ := zap.NewDevelopment()
 	validator := validator.New()
 
-	healthService := services.NewHealthService(cfg, logger, validator)
+	healthService := services.NewHealthService(cfg, validator)
 
 	// Test Check method
 	ctx := context.Background()

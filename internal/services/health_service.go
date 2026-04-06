@@ -5,7 +5,9 @@ import (
 	"go-boilerplate/internal/configs"
 
 	"github.com/go-playground/validator/v10"
-	"go.uber.org/zap"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // HealthService defines health check operations
@@ -16,25 +18,28 @@ type HealthService interface {
 
 type healthService struct {
 	cfg    configs.Config
-	logger *zap.Logger
+	tracer trace.Tracer // OpenTelemetry tracer for health service
 	v      *validator.Validate
 }
 
-// NewHealthService creates a new health service instance
+// NewHealthService creates a new health service instance with OpenTelemetry instrumentation
 func NewHealthService(
 	cfg configs.Config,
-	logger *zap.Logger,
 	v *validator.Validate,
 ) HealthService {
 	return &healthService{
 		cfg:    cfg,
-		logger: logger,
+		tracer: otel.Tracer("health-service"),
 		v:      v,
 	}
 }
 
 func (s *healthService) Check(ctx context.Context) error {
-	s.logger.Info("Health check performed")
+	ctx, span := s.tracer.Start(ctx, "HealthService.Check")
+	defer span.End()
+
+	span.SetStatus(codes.Ok, "health check performed")
+	span.AddEvent("Health check performed")
 	return nil
 }
 

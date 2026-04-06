@@ -12,7 +12,7 @@ import (
 )
 
 // Config holds the application configuration
-// It includes settings for RabbitMQ, database, Elasticsearch, and other optional features.
+// It includes settings for RabbitMQ, database, and other optional features.
 // The fields are populated from environment variables or defaults.
 // The configuration is loaded using the MustLoad function.
 type Config struct {
@@ -50,15 +50,14 @@ type Config struct {
 	DbReadTimeout  int // seconds
 	DbWriteTimeout int // seconds
 
-	// Elastic (optional)
-	ElasticEnabled             bool
-	ElasticAddresses           []string
-	ElasticIndex               string
-	ElasticAPIKey              string
-	ElasticUsername            string
-	ElasticPassword            string
-	ElasticBulkFlushBytes      int
-	ElasticBulkFlushIntervalMS int
+	// OpenTelemetry & ELK Stack Configuration
+	OtelServiceName    string
+	OtelServiceVersion string
+	OtelEnvironment    string
+	OtelOtlpEndpoint   string
+	OtelOtlpHeaders    map[string]string
+	OtelExportInterval int // seconds
+	OtelBatchTimeout   int // seconds
 
 	// Other (optional)
 	BISPAKEToken string
@@ -93,15 +92,14 @@ func MustLoad(stage string) Config {
 		DbReadTimeout:  getenvInt("DB_READ_TIMEOUT", 5),
 		DbWriteTimeout: getenvInt("DB_WRITE_TIMEOUT", 5),
 
-		// Elastic (optional)
-		ElasticEnabled:             getenvBool("ELASTIC_ENABLED", false),
-		ElasticAddresses:           splitCSVDefault(getenv("ELASTIC_ADDRESSES", ""), []string{"http://localhost:9200"}),
-		ElasticIndex:               getenv("ELASTIC_INDEX", "logs"),
-		ElasticAPIKey:              getenv("ELASTIC_API_KEY", ""),
-		ElasticUsername:            getenv("ELASTIC_USERNAME", ""),
-		ElasticPassword:            getenv("ELASTIC_PASSWORD", ""),
-		ElasticBulkFlushBytes:      getenvInt("ELASTIC_BULK_FLUSH_BYTES", 1_000_000),
-		ElasticBulkFlushIntervalMS: getenvInt("ELASTIC_BULK_FLUSH_INTERVAL_MS", 5000),
+		// OpenTelemetry & ELK Stack Configuration
+		OtelServiceName:    getenv("OTEL_SERVICE_NAME", getenv("APP_NAME", "go-boilerplate")),
+		OtelServiceVersion: getenv("OTEL_SERVICE_VERSION", "1.0.0"),
+		OtelEnvironment:    getenv("OTEL_ENVIRONMENT", "development"),
+		OtelOtlpEndpoint:   getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
+		OtelOtlpHeaders:    parseHeaders(getenv("OTEL_EXPORTER_OTLP_HEADERS", "")),
+		OtelExportInterval: getenvInt("OTEL_BSP_SCHEDULE_DELAY", 5),
+		OtelBatchTimeout:   getenvInt("OTEL_BSP_EXPORT_TIMEOUT", 30),
 
 		BISPAKEToken: getenv("BISPAKETOKEN", ""),
 
@@ -192,4 +190,21 @@ func requireNonEmpty(name, val string) {
 	if strings.TrimSpace(val) == "" {
 		panic(fmt.Errorf("missing %s", name))
 	}
+}
+
+// parseHeaders parses OTLP headers from environment variable
+// Format: "key1=value1,key2=value2"
+func parseHeaders(headerStr string) map[string]string {
+	headers := make(map[string]string)
+	if headerStr == "" {
+		return headers
+	}
+	
+	pairs := strings.Split(headerStr, ",")
+	for _, pair := range pairs {
+		if kv := strings.Split(strings.TrimSpace(pair), "="); len(kv) == 2 {
+			headers[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+		}
+	}
+	return headers
 }

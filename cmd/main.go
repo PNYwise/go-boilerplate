@@ -12,7 +12,6 @@ import (
 	"syscall"
 
 	_ "github.com/go-sql-driver/mysql" // Database driver
-	"go.uber.org/zap"
 )
 
 // main bootstraps the application - DO NOT MODIFY
@@ -66,9 +65,6 @@ func runApp(app *apps.App) {
 	fmt.Println("Press Ctrl+C to stop gracefully")
 
 	if err := app.Run(ctx); err != nil {
-		if logger := app.GetLogger(); logger != nil {
-			logger.Error("Application failed", zap.Error(err))
-		}
 		fmt.Printf("Application failed: %v\n", err)
 		os.Exit(1)
 	}
