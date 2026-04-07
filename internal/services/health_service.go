@@ -3,10 +3,10 @@ package services
 import (
 	"context"
 	"go-boilerplate/internal/configs"
+	"go-boilerplate/internal/utils/logs"
 
 	"github.com/go-playground/validator/v10"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -38,12 +38,14 @@ func (s *healthService) Check(ctx context.Context) error {
 	ctx, span := s.tracer.Start(ctx, "HealthService.Check")
 	defer span.End()
 
-	span.SetStatus(codes.Ok, "health check performed")
-	span.AddEvent("Health check performed")
+	logs.SpanInfo(ctx, span, "Health check performed")
 	return nil
 }
 
 func (s *healthService) GetStatus(ctx context.Context) map[string]interface{} {
+	ctx, span := s.tracer.Start(ctx, "HealthService.GetStatus")
+	defer span.End()
+
 	return map[string]interface{}{
 		"status": "healthy",
 		"app":    s.cfg.AppName,

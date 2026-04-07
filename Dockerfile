@@ -1,7 +1,7 @@
 # ------------------------------------------------------------------------------------
 # Stage 1: Builder (Build the Go application)
 # ------------------------------------------------------------------------------------
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git make
@@ -20,7 +20,7 @@ RUN go mod download
 COPY . .
 
 # Generate wire code and build the application
-RUN make wire
+RUN cd internal/apps && wire
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w" \
     -o main ./cmd

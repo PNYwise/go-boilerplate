@@ -12,7 +12,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -55,18 +54,9 @@ func (s *userService) CreateUser(ctx context.Context, dto userdtos.UserCreateDTO
 		attribute.String("user.email", dto.Email),
 	)
 
-	// Log the start of user creation
-	logs.LogInfo(ctx, "Starting user creation",
-		attribute.String("username", dto.Username),
-		attribute.String("email", dto.Email),
-	)
-
 	// Validate input
 	if err := s.v.Struct(dto); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "validation failed")
-		span.AddEvent("User creation validation failed")
-		logs.LogError(ctx, err, "User validation failed",
+		logs.SpanError(ctx, span, err, "User validation failed",
 			attribute.String("username", dto.Username),
 		)
 		return nil, fmt.Errorf("validation failed: %w", err)
@@ -75,10 +65,7 @@ func (s *userService) CreateUser(ctx context.Context, dto userdtos.UserCreateDTO
 	// Check if username already exists
 	existingUser, err := s.userRepo.GetByUsername(ctx, dto.Username)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to check existing user")
-		span.AddEvent("Error checking existing user")
-		logs.LogError(ctx, err, "Failed to check existing user",
+		logs.SpanError(ctx, span, err, "Failed to check existing user",
 			attribute.String("username", dto.Username),
 		)
 		return nil, fmt.Errorf("failed to check existing user: %w", err)
@@ -86,11 +73,7 @@ func (s *userService) CreateUser(ctx context.Context, dto userdtos.UserCreateDTO
 	if existingUser != nil {
 		err := fmt.Errorf("username '%s' already exists", dto.Username)
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "username already exists")
-		span.AddEvent("Username already exists", trace.WithAttributes(
-			attribute.String("username", dto.Username),
-		))
-		logs.LogWarn(ctx, "Username already exists",
+		logs.SpanWarn(ctx, span, "Username already exists",
 			attribute.String("username", dto.Username),
 		)
 		return nil, err
@@ -105,12 +88,8 @@ func (s *userService) CreateUser(ctx context.Context, dto userdtos.UserCreateDTO
 	// Save to database
 	id, err := s.userRepo.Create(ctx, user)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to create user")
-		span.AddEvent("Error creating user")
-		logs.LogError(ctx, err, "Failed to create user in database",
+		logs.SpanError(ctx, span, err, "Failed to create user in database",
 			attribute.String("username", dto.Username),
-			attribute.String("email", dto.Email),
 		)
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
@@ -118,10 +97,7 @@ func (s *userService) CreateUser(ctx context.Context, dto userdtos.UserCreateDTO
 	// Get created user to return complete data
 	createdUser, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to retrieve created user")
-		span.AddEvent("Error retrieving created user")
-		logs.LogError(ctx, err, "Failed to retrieve created user",
+		logs.SpanError(ctx, span, err, "Failed to retrieve created user",
 			attribute.Int64("user_id", id),
 		)
 		return nil, fmt.Errorf("failed to retrieve created user: %w", err)
@@ -129,17 +105,11 @@ func (s *userService) CreateUser(ctx context.Context, dto userdtos.UserCreateDTO
 
 	// Add success attributes to span
 	span.SetAttributes(attribute.Int64("user.id", id))
-	span.SetStatus(codes.Ok, "user created successfully")
-	span.AddEvent("User created successfully", trace.WithAttributes(
-		attribute.Int64("user_id", id),
-		attribute.String("username", dto.Username),
-	))
 
 	// Log successful user creation
-	logs.LogInfo(ctx, "User created successfully",
+	logs.SpanInfo(ctx, span, "User created successfully",
 		attribute.Int64("user_id", id),
 		attribute.String("username", dto.Username),
-		attribute.String("email", dto.Email),
 	)
 
 	return &userdtos.UserResponseDTO{
@@ -157,34 +127,22 @@ func (s *userService) GetUserByID(ctx context.Context, id int64) (*userdtos.User
 
 	span.SetAttributes(attribute.Int64("user.id", id))
 
-	logs.LogInfo(ctx, "Retrieving user by ID",
-		attribute.Int64("user_id", id),
-	)
-
 	user, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to get user")
-		span.AddEvent("Error retrieving user by ID")
-		logs.LogError(ctx, err, "Failed to retrieve user from database",
+		logs.SpanError(ctx, span, err, "Failed to retrieve user from database",
 			attribute.Int64("user_id", id),
 		)
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 	if user == nil {
 		err := fmt.Errorf("user with ID %d not found", id)
-		span.SetStatus(codes.Error, "user not found")
-		span.AddEvent("User not found")
-		logs.LogWarn(ctx, "User not found",
+		logs.SpanWarn(ctx, span, "User not found",
 			attribute.Int64("user_id", id),
 		)
 		return nil, err
 	}
 
-	span.SetStatus(codes.Ok, "user retrieved successfully")
-	span.AddEvent("User retrieved successfully")
-
-	logs.LogInfo(ctx, "User retrieved successfully",
+	logs.SpanInfo(ctx, span, "User retrieved successfully",
 		attribute.Int64("user_id", id),
 		attribute.String("username", user.Username),
 	)
@@ -206,20 +164,23 @@ func (s *userService) GetUserByUsername(ctx context.Context, username string) (*
 
 	user, err := s.userRepo.GetByUsername(ctx, username)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to get user")
-		span.AddEvent("Error retrieving user by username")
+		logs.SpanError(ctx, span, err, "Failed to get user by username",
+			attribute.String("username", username),
+		)
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 	if user == nil {
 		err := fmt.Errorf("user '%s' not found", username)
-		span.SetStatus(codes.Error, "user not found")
-		span.AddEvent("User not found")
+		logs.SpanWarn(ctx, span, "User not found by username",
+			attribute.String("username", username),
+		)
 		return nil, err
 	}
 
-	span.SetStatus(codes.Ok, "user retrieved successfully")
-	span.AddEvent("User retrieved successfully")
+	logs.SpanInfo(ctx, span, "User retrieved by username successfully",
+		attribute.String("username", user.Username),
+		attribute.Int64("user_id", user.ID),
+	)
 
 	return &userdtos.UserResponseDTO{
 		ID:        user.ID,

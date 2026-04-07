@@ -1,5 +1,5 @@
-// Package logs provides OpenTelemetry-based observability for the go-boilerplate application
-// following best practices for distributed tracing and logging with ELK stack integration
+// Package logs provides OpenTelemetry-based observability with Zap structured logging
+// following best practices for distributed tracing and high-performance logging with ELK stack integration
 package logs
 
 import (
@@ -7,13 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"go-boilerplate/internal/configs"
-	stdlog "log"
 	"os"
 	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
@@ -21,23 +19,25 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const (
 	ServiceNameDB = "database"
 )
 
-// LogLevel represents different log levels
+// LogLevel represents log level enumeration
 type LogLevel string
 
 const (
-	LogLevelDebug LogLevel = "DEBUG"
-	LogLevelInfo  LogLevel = "INFO"
-	LogLevelWarn  LogLevel = "WARN"
-	LogLevelError LogLevel = "ERROR"
+	LogLevelDebug LogLevel = "debug"
+	LogLevelInfo  LogLevel = "info"
+	LogLevelWarn  LogLevel = "warn"
+	LogLevelError LogLevel = "error"
 )
 
-// StructuredLog represents a structured log entry compatible with ELK stack
+// StructuredLog represents the structure for JSON logs compatible with ELK stack
 type StructuredLog struct {
 	Timestamp      time.Time              `json:"@timestamp"`
 	Level          LogLevel               `json:"level"`
@@ -51,6 +51,82 @@ type StructuredLog struct {
 	Error          *ErrorInfo             `json:"error,omitempty"`
 }
 
+// ZapLogger wraps Zap logger with OpenTelemetry integration
+type ZapLogger struct {
+	logger *zap.Logger
+	sugar  *zap.SugaredLogger
+}
+
+// Info logs an info level message
+func (z *ZapLogger) Info(msg string, fields ...zap.Field) {
+	z.logger.Info(msg, fields...)
+}
+
+// Infof logs an info level message with formatting
+func (z *ZapLogger) Infof(template string, args ...interface{}) {
+	z.sugar.Infof(template, args...)
+}
+
+// Debug logs a debug level message
+func (z *ZapLogger) Debug(msg string, fields ...zap.Field) {
+	z.logger.Debug(msg, fields...)
+}
+
+// Debugf logs a debug level message with formatting
+func (z *ZapLogger) Debugf(template string, args ...interface{}) {
+	z.sugar.Debugf(template, args...)
+}
+
+// Warn logs a warn level message
+func (z *ZapLogger) Warn(msg string, fields ...zap.Field) {
+	z.logger.Warn(msg, fields...)
+}
+
+// Warnf logs a warn level message with formatting
+func (z *ZapLogger) Warnf(template string, args ...interface{}) {
+	z.sugar.Warnf(template, args...)
+}
+
+// Error logs an error level message
+func (z *ZapLogger) Error(msg string, fields ...zap.Field) {
+	z.logger.Error(msg, fields...)
+}
+
+// Errorf logs an error level message with formatting
+func (z *ZapLogger) Errorf(template string, args ...interface{}) {
+	z.sugar.Errorf(template, args...)
+}
+
+// Fatal logs a fatal level message and exits
+func (z *ZapLogger) Fatal(msg string, fields ...zap.Field) {
+	z.logger.Fatal(msg, fields...)
+}
+
+// Fatalf logs a fatal level message with formatting and exits
+func (z *ZapLogger) Fatalf(template string, args ...interface{}) {
+	z.sugar.Fatalf(template, args...)
+}
+
+// With adds structured context to the logger
+func (z *ZapLogger) With(fields ...zap.Field) *ZapLogger {
+	return &ZapLogger{
+		logger: z.logger.With(fields...),
+		sugar:  z.logger.With(fields...).Sugar(),
+	}
+}
+
+// WithContext adds context fields like trace ID and span ID from OpenTelemetry context
+func (z *ZapLogger) WithContext(ctx context.Context) *ZapLogger {
+	span := oteltrace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		return z.With(
+			zap.String("trace.id", span.SpanContext().TraceID().String()),
+			zap.String("span.id", span.SpanContext().SpanID().String()),
+		)
+	}
+	return z
+}
+
 // ErrorInfo represents error information in logs
 type ErrorInfo struct {
 	Message    string `json:"message"`
@@ -58,17 +134,13 @@ type ErrorInfo struct {
 	StackTrace string `json:"stack_trace,omitempty"`
 }
 
-// Global tracer provider and tracers
+// Global tracer provider and Zap logger
 var (
 	tracerProvider *trace.TracerProvider
-	appTracer      oteltrace.Tracer
-	userSvcTracer  oteltrace.Tracer
-	healthTracer   oteltrace.Tracer
-	repoTracer     oteltrace.Tracer
-	httpTracer     oteltrace.Tracer
-	dbTracer       oteltrace.Tracer
 	// Global service configuration for logging
 	serviceConfig configs.Config
+	// Global Zap logger instance
+	globalLogger *ZapLogger
 )
 
 // InitializeOpenTelemetry sets up OpenTelemetry with proper exporters for ELK integration
@@ -97,6 +169,7 @@ func InitializeOpenTelemetry(cfg configs.Config) (func(), error) {
 		// Create OTLP gRPC exporter for ELK stack integration
 		options := []otlptracegrpc.Option{
 			otlptracegrpc.WithEndpoint(cfg.OtelOtlpEndpoint),
+			otlptracegrpc.WithTimeout(10 * time.Second), // Add connection timeout
 		}
 
 		// Add headers if configured (for authentication, custom routing, etc.)
@@ -140,37 +213,118 @@ func InitializeOpenTelemetry(cfg configs.Config) (func(), error) {
 		propagation.Baggage{},
 	))
 
-	// Initialize tracers for different components
-	appTracer = otel.Tracer("app")
-	repoTracer = otel.Tracer("repository")
-	httpTracer = otel.Tracer("http")
-	dbTracer = otel.Tracer("database")
+	// Initialize Zap logger
+	if err := initializeZapLogger(cfg); err != nil {
+		return nil, fmt.Errorf("failed to initialize Zap logger: %w", err)
+	}
 
-	stdlog.Printf("OpenTelemetry initialized successfully with service name: %s", cfg.OtelServiceName)
+	globalLogger.Info("OpenTelemetry and Zap initialized successfully",
+		zap.String("service.name", cfg.OtelServiceName),
+		zap.String("service.version", cfg.OtelServiceVersion),
+		zap.String("environment", cfg.OtelEnvironment))
 
 	// Return cleanup function
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := tracerProvider.Shutdown(ctx); err != nil {
-			stdlog.Printf("Error shutting down tracer provider: %v", err)
+			globalLogger.Error("Error shutting down tracer provider", zap.Error(err))
 		}
 	}, nil
 }
 
-// GetDBTracer returns the database tracer
-func GetDBTracer() oteltrace.Tracer {
-	return dbTracer
+// GetLogger returns the global Zap logger instance
+func GetLogger() *ZapLogger {
+	return globalLogger
 }
 
-// GetUserServiceTracer returns the user service tracer
-func GetUserServiceTracer() oteltrace.Tracer {
-	return userSvcTracer
+// initializeZapLogger sets up Zap logger with production config for ELK stack
+func initializeZapLogger(cfg configs.Config) error {
+	// Configure Zap encoder for ELK stack
+	encoderConfig := zapcore.EncoderConfig{
+		TimeKey:        "@timestamp",
+		LevelKey:       "level",
+		NameKey:        "logger",
+		CallerKey:      "caller",
+		FunctionKey:    zapcore.OmitKey,
+		MessageKey:     "message",
+		StacktraceKey:  "stacktrace",
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeLevel:    zapcore.LowercaseLevelEncoder,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
+	}
+
+	// Create JSON encoder for structured logging
+	encoder := zapcore.NewJSONEncoder(encoderConfig)
+
+	// Configure log level
+	var level zapcore.Level
+	switch cfg.OtelEnvironment {
+	case "development", "dev":
+		level = zapcore.DebugLevel
+	case "staging":
+		level = zapcore.InfoLevel
+	default: // production
+		level = zapcore.WarnLevel
+	}
+
+	// Create core with console output (Docker/K8s will capture this)
+	core := zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), level)
+
+	// Create logger with caller info and stack trace for errors
+	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+
+	// Add global fields for service identification
+	logger = logger.With(
+		zap.String("service.name", cfg.OtelServiceName),
+		zap.String("service.version", cfg.OtelServiceVersion),
+		zap.String("environment", cfg.OtelEnvironment),
+	)
+
+	// Create global logger instance
+	globalLogger = &ZapLogger{
+		logger: logger,
+		sugar:  logger.Sugar(),
+	}
+
+	return nil
 }
 
-// GetHTTPTracer returns the HTTP tracer
-func GetHTTPTracer() oteltrace.Tracer {
-	return httpTracer
+// Info is a convenience function to log info messages using the global logger
+func Info(msg string, fields ...zap.Field) {
+	if globalLogger != nil {
+		globalLogger.Info(msg, fields...)
+	}
+}
+
+// Debug is a convenience function to log debug messages using the global logger
+func Debug(msg string, fields ...zap.Field) {
+	if globalLogger != nil {
+		globalLogger.Debug(msg, fields...)
+	}
+}
+
+// Warn is a convenience function to log warning messages using the global logger
+func Warn(msg string, fields ...zap.Field) {
+	if globalLogger != nil {
+		globalLogger.Warn(msg, fields...)
+	}
+}
+
+// Error is a convenience function to log error messages using the global logger
+func Error(msg string, fields ...zap.Field) {
+	if globalLogger != nil {
+		globalLogger.Error(msg, fields...)
+	}
+}
+
+// Fatal is a convenience function to log fatal messages and exit using the global logger
+func Fatal(msg string, fields ...zap.Field) {
+	if globalLogger != nil {
+		globalLogger.Fatal(msg, fields...)
+	}
 }
 
 // LogInfo creates a structured log entry and outputs it as JSON
@@ -230,117 +384,100 @@ func logStructured(ctx context.Context, level LogLevel, message string, errorInf
 		Error:          errorInfo,
 	}
 
-	// Marshal to JSON and output
-	logJSON, err := json.Marshal(logEntry)
-	if err != nil {
-		stdlog.Printf("Failed to marshal log entry: %v", err)
-		return
+	// Marshal to JSON and output using Zap
+	if globalLogger != nil {
+		// Use Zap for structured logging instead of fmt.Println
+		switch level {
+		case LogLevelDebug:
+			globalLogger.Debug("Structured log entry",
+				zap.String("trace.id", traceID),
+				zap.String("span.id", spanID),
+				zap.Any("attributes", attributes),
+				zap.Any("error", errorInfo),
+			)
+		case LogLevelInfo:
+			globalLogger.Info(message,
+				zap.String("trace.id", traceID),
+				zap.String("span.id", spanID),
+				zap.Any("attributes", attributes),
+			)
+		case LogLevelWarn:
+			globalLogger.Warn(message,
+				zap.String("trace.id", traceID),
+				zap.String("span.id", spanID),
+				zap.Any("attributes", attributes),
+			)
+		case LogLevelError:
+			fields := []zap.Field{
+				zap.String("trace.id", traceID),
+				zap.String("span.id", spanID),
+				zap.Any("attributes", attributes),
+			}
+			if errorInfo != nil {
+				fields = append(fields, zap.Any("error", errorInfo))
+			}
+			globalLogger.Error(message, fields...)
+		}
+	} else {
+		// Fallback to JSON output for backward compatibility
+		logJSON, err := json.Marshal(logEntry)
+		if err != nil {
+			// Use basic logging if Zap is not available
+			fmt.Printf("Failed to marshal log entry: %v\n", err)
+			return
+		}
+		fmt.Println(string(logJSON))
 	}
-
-	// Output to stdout (will be captured by Docker/Kubernetes and sent to ELK)
-	fmt.Println(string(logJSON))
 }
 
-// LogInfoWithTracer creates a span and logs an info event with attributes
-func LogInfoWithTracer(ctx context.Context, tracer oteltrace.Tracer, operation string, message string, attrs ...attribute.KeyValue) {
-	ctx, span := tracer.Start(ctx, operation)
-	defer span.End()
-
-	span.SetAttributes(attrs...)
-	span.AddEvent(message, oteltrace.WithAttributes(attrs...))
-	span.SetStatus(codes.Ok, "")
-
-	// Also log as structured JSON
+// LogInfoWithTrace logs info with trace context
+func LogInfoWithTrace(ctx context.Context, message string, attrs ...attribute.KeyValue) {
 	LogInfo(ctx, message, attrs...)
 }
 
-// LogErrorWithTracer creates a span and logs an error event with attributes
-func LogErrorWithTracer(ctx context.Context, tracer oteltrace.Tracer, operation string, err error, message string, attrs ...attribute.KeyValue) {
-	ctx, span := tracer.Start(ctx, operation)
-	defer span.End()
-
-	span.SetAttributes(attrs...)
-	span.RecordError(err)
-	span.AddEvent(message, oteltrace.WithAttributes(attrs...))
-	span.SetStatus(codes.Error, err.Error())
-
-	// Also log as structured JSON
+// LogErrorWithTrace logs error with trace context
+func LogErrorWithTrace(ctx context.Context, err error, message string, attrs ...attribute.KeyValue) {
 	LogError(ctx, err, message, attrs...)
 }
 
-// LogDBOperation logs database operations with query information
-func LogDBOperation(ctx context.Context, operation, query string, args []interface{}, duration time.Duration, err error) {
-	ctx, span := dbTracer.Start(ctx, operation)
-	defer span.End()
+// Simple, performance-focused helper functions for developers
 
-	attrs := []attribute.KeyValue{
-		semconv.DBStatementKey.String(query),
-		semconv.DBOperationKey.String(operation),
-		attribute.String("db.query.duration", duration.String()),
-	}
-
-	if len(args) > 0 {
-		attrs = append(attrs, attribute.Int("db.query.args_count", len(args)))
-	}
-
-	span.SetAttributes(attrs...)
-
-	if err != nil {
+// SpanError handles the common pattern: span.RecordError + LogError
+func SpanError(ctx context.Context, span oteltrace.Span, err error, message string, attrs ...attribute.KeyValue) {
+	if span != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		LogError(ctx, err, fmt.Sprintf("Database operation %s failed", operation), attrs...)
-	} else {
-		span.SetStatus(codes.Ok, "")
-		LogInfo(ctx, fmt.Sprintf("Database operation %s completed", operation), attrs...)
 	}
+	LogError(ctx, err, message, attrs...)
 }
 
-// LogHTTPRequest logs HTTP request information
-func LogHTTPRequest(ctx context.Context, method, path string, statusCode int, requestSize, responseSize int64, duration time.Duration) {
-	ctx, span := httpTracer.Start(ctx, fmt.Sprintf("%s %s", method, path))
-	defer span.End()
-
-	attrs := []attribute.KeyValue{
-		semconv.HTTPMethodKey.String(method),
-		semconv.HTTPRouteKey.String(path),
-		semconv.HTTPStatusCodeKey.Int(statusCode),
-		attribute.Int64("http.request.size", requestSize),
-		attribute.Int64("http.response.size", responseSize),
-		attribute.String("http.request.duration", duration.String()),
+// SpanInfo logs info with span attributes (optional)
+func SpanInfo(ctx context.Context, span oteltrace.Span, message string, attrs ...attribute.KeyValue) {
+	if span != nil && len(attrs) > 0 {
+		span.SetAttributes(attrs...)
 	}
-
-	span.SetAttributes(attrs...)
-
-	if statusCode >= 400 {
-		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", statusCode))
-		LogWarn(ctx, fmt.Sprintf("HTTP request failed: %s %s", method, path), attrs...)
-	} else {
-		span.SetStatus(codes.Ok, "")
-		LogInfo(ctx, fmt.Sprintf("HTTP request completed: %s %s", method, path), attrs...)
-	}
+	LogInfo(ctx, message, attrs...)
 }
 
-// Utility functions for environment detection
-func isProduction() bool {
-	env := os.Getenv("ENVIRONMENT")
-	return env == "production" || env == "prod"
+// SpanWarn logs warning with span attributes (optional)
+func SpanWarn(ctx context.Context, span oteltrace.Span, message string, attrs ...attribute.KeyValue) {
+	if span != nil && len(attrs) > 0 {
+		span.SetAttributes(attrs...)
+	}
+	LogWarn(ctx, message, attrs...)
 }
 
-func getEnvironment() string {
-	if env := os.Getenv("ENVIRONMENT"); env != "" {
-		return env
+// SpanDebug logs debug with span attributes (optional)
+func SpanDebug(ctx context.Context, span oteltrace.Span, message string, attrs ...attribute.KeyValue) {
+	if span != nil && len(attrs) > 0 {
+		span.SetAttributes(attrs...)
 	}
-	return "development"
+	LogDebug(ctx, message, attrs...)
 }
 
-func getOTLPEndpoint(cfg configs.Config) string {
-	// Check for OTLP endpoint in environment variables or config
-	if endpoint := os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"); endpoint != "" {
-		return endpoint
+// Sync flushes any buffered log entries
+func Sync() error {
+	if globalLogger != nil && globalLogger.logger != nil {
+		return globalLogger.logger.Sync()
 	}
-	if endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); endpoint != "" {
-		return endpoint
-	}
-	// Default to OpenTelemetry Collector endpoint
-	return "http://localhost:4318/v1/traces"
+	return nil
 }
