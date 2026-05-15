@@ -56,8 +56,6 @@ type Config struct {
 	OtelEnvironment    string
 	OtelOtlpEndpoint   string
 	OtelOtlpHeaders    map[string]string
-	OtelExportInterval int // seconds
-	OtelBatchTimeout   int // seconds
 
 	// Other (optional)
 	BISPAKEToken string
@@ -98,8 +96,6 @@ func MustLoad(stage string) Config {
 		OtelEnvironment:    getenv("OTEL_ENVIRONMENT", "development"),
 		OtelOtlpEndpoint:   getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
 		OtelOtlpHeaders:    parseHeaders(getenv("OTEL_EXPORTER_OTLP_HEADERS", "")),
-		OtelExportInterval: getenvInt("OTEL_BSP_SCHEDULE_DELAY", 5),
-		OtelBatchTimeout:   getenvInt("OTEL_BSP_EXPORT_TIMEOUT", 30),
 
 		BISPAKEToken: getenv("BISPAKETOKEN", ""),
 

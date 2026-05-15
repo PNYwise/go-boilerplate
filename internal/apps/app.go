@@ -62,16 +62,16 @@ func (a *App) Run(ctx context.Context) error {
 
 // Shutdown gracefully shuts down the application - DO NOT MODIFY
 func (a *App) Shutdown() {
-	a.shutdown(false)
+	a.shutdown()
 }
 
 // ShutdownWithPanic handles shutdown after a panic - DO NOT MODIFY
 func (a *App) ShutdownWithPanic() {
-	a.shutdown(true)
+	a.shutdown()
 }
 
 // shutdown handles the actual shutdown process - DO NOT MODIFY
-func (a *App) shutdown(fromPanic bool) {
+func (a *App) shutdown() {
 	// Always attempt cleanup, even if one fails
 	defer func() {
 		if r := recover(); r != nil {
