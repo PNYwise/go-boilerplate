@@ -93,7 +93,6 @@ func InitializeOpenTelemetry(cfg configs.Config) (func(), error) {
 	ctx := context.Background()
 	serviceConfig = cfg
 
-	// 1. Build Resource Info
 	res, err := resource.New(ctx,
 		resource.WithTelemetrySDK(),
 		resource.WithAttributes(
@@ -157,7 +156,6 @@ func InitializeOpenTelemetry(cfg configs.Config) (func(), error) {
 
 	globalLogger.Info("OpenTelemetry initialized (sending data to Collector only)")
 
-	// Cleanup function
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -167,7 +165,6 @@ func InitializeOpenTelemetry(cfg configs.Config) (func(), error) {
 	}, nil
 }
 
-// GetLogger returns the global Zap logger instance
 func GetLogger() *ZapLogger {
 	return globalLogger
 }
@@ -185,14 +182,12 @@ func initializeZapLogger(cfg configs.Config, res *resource.Resource, logExporter
 	encoderConfig.TimeKey = "@timestamp"
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
-	// Tetap membuat stdout core agar aplikasi bisa di-debug lewat console (misal di docker logs)
 	stdoutCore := zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(os.Stdout), level)
 	var cores []zapcore.Core = []zapcore.Core{stdoutCore}
 
-	// Jika logExporter ada, tambahkan OTel Core (dengan BatchProcessor agar asinkron & cepat)
 	if logExporter != nil && res != nil {
 		logProvider := sdklog.NewLoggerProvider(
-			sdklog.WithProcessor(sdklog.NewBatchProcessor(logExporter)), // Menggunakan batch agar performa tidak terblokir
+			sdklog.WithProcessor(sdklog.NewBatchProcessor(logExporter)),
 			sdklog.WithResource(res),
 		)
 		otelCore := otelzap.NewCore(cfg.AppName, otelzap.WithLoggerProvider(logProvider))
