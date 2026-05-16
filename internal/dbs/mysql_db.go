@@ -85,7 +85,7 @@ func NewMySQLDB(cfg configs.Config) (*sql.DB, func(), error) {
         attribute.String("db.user", cfg.DbUser),                     // Database user
         attribute.String("server.address", cfg.DbHost),              // Database host
         attribute.Int("server.port", cfg.DbPort),                    // Database port
-        attribute.String("service.name", cfg.OtelServiceName),       // Service name for correlation
+        attribute.String("service.name", cfg.AppName),       // Service name for correlation
         attribute.String("service.version", cfg.OtelServiceVersion), // Service version
         attribute.String("deployment.environment", cfg.OtelEnvironment), // Environment (dev/prod)
 	));

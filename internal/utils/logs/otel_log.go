@@ -97,7 +97,7 @@ func InitializeOpenTelemetry(cfg configs.Config) (func(), error) {
 	res, err := resource.New(ctx,
 		resource.WithTelemetrySDK(),
 		resource.WithAttributes(
-			semconv.ServiceName(cfg.OtelServiceName),
+			semconv.ServiceName(cfg.AppName),
 			semconv.ServiceVersion(cfg.OtelServiceVersion),
 			attribute.String("service.node.name", cfg.OtelServiceNodeName),
 			attribute.String("deployment.environment", cfg.OtelEnvironment),
@@ -195,12 +195,12 @@ func initializeZapLogger(cfg configs.Config, res *resource.Resource, logExporter
 			sdklog.WithProcessor(sdklog.NewBatchProcessor(logExporter)), // Menggunakan batch agar performa tidak terblokir
 			sdklog.WithResource(res),
 		)
-		otelCore := otelzap.NewCore(cfg.OtelServiceName, otelzap.WithLoggerProvider(logProvider))
+		otelCore := otelzap.NewCore(cfg.AppName, otelzap.WithLoggerProvider(logProvider))
 		cores = append(cores, otelCore)
 	}
 
 	logger := zap.New(zapcore.NewTee(cores...), zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel)).With(
-		zap.String("service.name", cfg.OtelServiceName),
+		zap.String("service.name", cfg.AppName),
 		zap.String("service.version", cfg.OtelServiceVersion),
 		zap.String("environment", cfg.OtelEnvironment),
 	)

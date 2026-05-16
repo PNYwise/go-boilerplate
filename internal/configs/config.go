@@ -50,8 +50,7 @@ type Config struct {
 	DbReadTimeout  int // seconds
 	DbWriteTimeout int // seconds
 
-	// OpenTelemetry & ELK Stack Configuration
-	OtelServiceName    string
+	// OpenTelemetry Configuration
 	OtelServiceVersion string
 	OtelEnvironment    string
 	OtelServiceNodeName string
@@ -91,8 +90,7 @@ func MustLoad(stage string) Config {
 		DbReadTimeout:  getenvInt("DB_READ_TIMEOUT", 5),
 		DbWriteTimeout: getenvInt("DB_WRITE_TIMEOUT", 5),
 
-		// OpenTelemetry & ELK Stack Configuration
-		OtelServiceName:    getenv("OTEL_SERVICE_NAME", getenv("APP_NAME", "go-boilerplate")),
+		// OpenTelemetry Configuration
 		OtelServiceVersion: getenv("OTEL_SERVICE_VERSION", "1.0.0"),
 		OtelEnvironment:    getenv("OTEL_ENVIRONMENT", "development"),
 		OtelServiceNodeName: getenv("OTEL_SERVICE_NODE_NAME", hostnameOrEmpty()),
