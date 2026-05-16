@@ -99,6 +99,7 @@ func InitializeOpenTelemetry(cfg configs.Config) (func(), error) {
 		resource.WithAttributes(
 			semconv.ServiceName(cfg.OtelServiceName),
 			semconv.ServiceVersion(cfg.OtelServiceVersion),
+			attribute.String("service.node.name", cfg.OtelServiceNodeName),
 			attribute.String("deployment.environment", cfg.OtelEnvironment),
 			attribute.String("telemetry.sdk.language", "go"),
 			attribute.String("service.runtime.version", goruntime.Version()),

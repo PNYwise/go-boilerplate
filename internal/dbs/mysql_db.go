@@ -3,6 +3,8 @@ package dbs
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"fmt"
 	"go-boilerplate/internal/configs"
 	"log"
@@ -42,6 +44,12 @@ func NewMySQLDB(cfg configs.Config) (*sql.DB, func(), error) {
 			attribute.String("db.read_timeout", fmt.Sprintf("%ds", cfg.DbReadTimeout)),                // Read timeout
 			attribute.String("db.write_timeout", fmt.Sprintf("%ds", cfg.DbWriteTimeout)),              // Write timeout
 		),
+		otelsql.WithSpanOptions(otelsql.SpanOptions{
+			DisableErrSkip: true,
+			RecordError: func(err error) bool {
+				return err != nil && !errors.Is(err, driver.ErrSkip)
+			},
+		}),
 		otelsql.WithSQLCommenter(true), // Add trace_id to SQL comments for correlation
 	)
 	if err != nil {

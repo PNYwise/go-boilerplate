@@ -54,6 +54,7 @@ type Config struct {
 	OtelServiceName    string
 	OtelServiceVersion string
 	OtelEnvironment    string
+	OtelServiceNodeName string
 	OtelOtlpEndpoint   string
 	OtelOtlpHeaders    map[string]string
 
@@ -94,6 +95,7 @@ func MustLoad(stage string) Config {
 		OtelServiceName:    getenv("OTEL_SERVICE_NAME", getenv("APP_NAME", "go-boilerplate")),
 		OtelServiceVersion: getenv("OTEL_SERVICE_VERSION", "1.0.0"),
 		OtelEnvironment:    getenv("OTEL_ENVIRONMENT", "development"),
+		OtelServiceNodeName: getenv("OTEL_SERVICE_NODE_NAME", hostnameOrEmpty()),
 		OtelOtlpEndpoint:   getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
 		OtelOtlpHeaders:    parseHeaders(getenv("OTEL_EXPORTER_OTLP_HEADERS", "")),
 
@@ -161,6 +163,14 @@ func getenvBool(key string, def bool) bool {
 		}
 	}
 	return def
+}
+
+func hostnameOrEmpty() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(hostname)
 }
 
 func splitCSVDefault(s string, def []string) []string {
