@@ -57,6 +57,7 @@ type Config struct {
 
 	AppName  string
 	HTTPAddr string
+	CorsAllowedOrigins []string
 	GrpcAddr string
 }
 
@@ -92,6 +93,7 @@ func MustLoad(stage string) Config {
 		OtelOtlpEndpoint:   getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
 		OtelOtlpHeaders:    parseHeaders(getenv("OTEL_EXPORTER_OTLP_HEADERS", "")),
 
+		CorsAllowedOrigins: splitCSVDefault(getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"), []string{"http://localhost:3000"}),
 		AppName:  getenv("APP_NAME", "example"),
 		HTTPAddr: getenv("HTTP_ADDR", ":8080"),
 		GrpcAddr: getenv("GRPC_ADDR", ":9090"),

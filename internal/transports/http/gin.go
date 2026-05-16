@@ -32,7 +32,7 @@ func NewHTTPServer(
 	r := gin.New()
 
 	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowOrigins = []string{"http://localhost:3000"}
+	corsConfig.AllowOrigins = cfg.CorsAllowedOrigins
 	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"}
 	corsConfig.AllowHeaders = []string{
 		"Origin",
