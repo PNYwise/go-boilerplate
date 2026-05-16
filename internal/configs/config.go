@@ -16,8 +16,6 @@ import (
 // The fields are populated from environment variables or defaults.
 // The configuration is loaded using the MustLoad function.
 type Config struct {
-	Mode string
-
 	// Basic Auth
 	BasicAuthUser string
 	BasicAuthPass string
@@ -57,9 +55,6 @@ type Config struct {
 	OtelOtlpEndpoint   string
 	OtelOtlpHeaders    map[string]string
 
-	// Other (optional)
-	BISPAKEToken string
-
 	AppName  string
 	HTTPAddr string
 	GrpcAddr string
@@ -96,8 +91,6 @@ func MustLoad(stage string) Config {
 		OtelServiceNodeName: getenv("OTEL_SERVICE_NODE_NAME", hostnameOrEmpty()),
 		OtelOtlpEndpoint:   getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
 		OtelOtlpHeaders:    parseHeaders(getenv("OTEL_EXPORTER_OTLP_HEADERS", "")),
-
-		BISPAKEToken: getenv("BISPAKETOKEN", ""),
 
 		AppName:  getenv("APP_NAME", "example"),
 		HTTPAddr: getenv("HTTP_ADDR", ":8080"),
