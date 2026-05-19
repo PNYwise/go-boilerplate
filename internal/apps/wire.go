@@ -29,6 +29,7 @@ import (
 
 	httptransport "go-boilerplate/internal/transports/http"
 	httphandlers "go-boilerplate/internal/transports/http/handlers"
+	dbtransaction "go-boilerplate/internal/utils/db-transaction"
 	"go-boilerplate/internal/utils/validation"
 
 	"github.com/google/wire"
@@ -41,7 +42,7 @@ import (
 var InfrastructureProviders = wire.NewSet(
 	// Database connection with OpenTelemetry instrumentation
 	dbs.NewMySQLDB,
-
+	dbtransaction.NewDbTransactionUtil,
 	// Input validation
 	validation.GetValidator,
 
@@ -57,7 +58,7 @@ var InfrastructureProviders = wire.NewSet(
 
 var RepositoryProviders = wire.NewSet(
 	repositories.NewUserRepository,
-
+	repositories.NewRoleRepository,
 	// Add new repositories here:
 	// repositories.NewProductRepository,
 	// repositories.NewOrderRepository,

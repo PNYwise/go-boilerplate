@@ -16,7 +16,8 @@ import (
 type UserRepository interface {
 	GetByID(ctx context.Context, id int64) (*entities.User, error)
 	GetByUsername(ctx context.Context, username string) (*entities.User, error)
-	Create(ctx context.Context, user *entities.User) (int64, error)
+	Create(ctx context.Context, tx *sql.Tx, user *entities.User) (int64, error)
+
 }
 
 type userRepository struct {
@@ -76,7 +77,7 @@ func (r *userRepository) GetByUsername(ctx context.Context, username string) (*e
 	return &user, nil
 }
 
-func (r *userRepository) Create(ctx context.Context, user *entities.User) (int64, error) {
+func (r *userRepository) Create(ctx context.Context, tx *sql.Tx, user *entities.User) (int64, error) {
 	ctx, span := r.tracer.Start(ctx, "UserRepository.Create")
 	defer span.End()
 
@@ -88,7 +89,7 @@ func (r *userRepository) Create(ctx context.Context, user *entities.User) (int64
 	query := `INSERT INTO users (username, email, created_at, updated_at) VALUES (?, ?, ?, ?)`
 	now := time.Now()
 
-	result, err := r.db.ExecContext(ctx, query, user.Username, user.Email, now, now)
+	result, err := tx.ExecContext(ctx, query, user.Username, user.Email, now, now)
 	if err != nil {
 		logs.SpanError(ctx, span, err, "Failed to insert user into database",
 			attribute.String("username", user.Username),

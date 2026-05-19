@@ -2,11 +2,13 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"go-boilerplate/internal/configs"
 	userdtos "go-boilerplate/internal/dtos/user_dtos"
 	"go-boilerplate/internal/entities"
 	"go-boilerplate/internal/repositories"
+	dbtransaction "go-boilerplate/internal/utils/db-transaction"
 	"go-boilerplate/internal/utils/logs"
 
 	"github.com/go-playground/validator/v10"
@@ -20,10 +22,13 @@ type UserService interface {
 	CreateUser(ctx context.Context, dto userdtos.UserCreateDTO) (*userdtos.UserResponseDTO, error)
 	GetUserByID(ctx context.Context, id int64) (*userdtos.UserResponseDTO, error)
 	GetUserByUsername(ctx context.Context, username string) (*userdtos.UserResponseDTO, error)
+	CreateUserWithRole(ctx context.Context, id int64, dto userdtos.UserCreateDTO) (*userdtos.UserResponseDTO, error)
 }
 
 type userService struct {
 	userRepo repositories.UserRepository
+	roleRepo repositories.RoleRepository
+	dbtx     dbtransaction.DbTransactionUtil
 	cfg      configs.Config
 	tracer   trace.Tracer // OpenTelemetry tracer for this service
 	v        *validator.Validate
@@ -32,11 +37,15 @@ type userService struct {
 // NewUserService creates a new user service instance with OpenTelemetry instrumentation
 func NewUserService(
 	userRepo repositories.UserRepository,
+	roleRepo repositories.RoleRepository,
+	dbtx dbtransaction.DbTransactionUtil,
 	cfg configs.Config,
 	v *validator.Validate,
 ) UserService {
 	return &userService{
 		userRepo: userRepo,
+		roleRepo: roleRepo,
+		dbtx:     dbtx,
 		cfg:      cfg,
 		tracer:   otel.Tracer("user-service"),
 		v:        v,
@@ -86,13 +95,17 @@ func (s *userService) CreateUser(ctx context.Context, dto userdtos.UserCreateDTO
 	}
 
 	// Save to database
-	id, err := s.userRepo.Create(ctx, user)
+	
+	tx, err := s.dbtx.InitTx(ctx, nil)
+	
+	id, err := s.userRepo.Create(ctx, tx, user)
 	if err != nil {
 		logs.SpanError(ctx, span, err, "Failed to create user in database",
 			attribute.String("username", dto.Username),
 		)
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
+	s.dbtx.CommitTx(tx)
 
 	// Get created user to return complete data
 	createdUser, err := s.userRepo.GetByID(ctx, id)
@@ -189,4 +202,39 @@ func (s *userService) GetUserByUsername(ctx context.Context, username string) (*
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	}, nil
+}
+
+func (s *userService) CreateUserWithRole(ctx context.Context, id int64, dto userdtos.UserCreateDTO) (*userdtos.UserResponseDTO, error) {
+	// update user and role
+
+	// init tx
+	tx, err := s.dbtx.InitTx(ctx,&sql.TxOptions{
+		Isolation: sql.IsolationLevel(sql.LevelLinearizable),
+		ReadOnly: false,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize transaction: %w", err)
+	}
+
+	_, err = s.userRepo.Create(ctx, tx, &entities.User{
+		Username: dto.Username,
+		Email:    dto.Email,
+	})
+	if err != nil {
+		s.dbtx.RollbackTx(tx)
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	_, err = s.roleRepo.Create(ctx, tx, &entities.Role{
+		Name: "admin",
+	})
+	if err != nil {
+		s.dbtx.RollbackTx(tx)
+		return nil, fmt.Errorf("failed to create role: %w", err)
+	}
+
+	s.dbtx.CommitTx(tx)
+
+	return nil, nil
 }

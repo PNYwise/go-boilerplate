@@ -64,6 +64,30 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	c.JSON(http.StatusCreated, user)
 }
 
+func (h *UserHandler) CreateUserWithRole(c *gin.Context) {
+	ctx, span := h.tracer.Start(c.Request.Context(), "UserHandler.CreateUserWithRole")
+	defer span.End()
+
+	var req userdtos.UserCreateDTO
+	if err := c.BindJSON(&req); err != nil {
+		logs.SpanError(ctx, span, err, "Failed to bind JSON request")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	user, err := h.userSrv.CreateUserWithRole(ctx, 0, req)
+	if err != nil {
+		logs.SpanError(ctx, span, err, "Failed to create user",
+			attribute.String("username", req.Username),
+		)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, user)
+
+}
+
 // GetUserByID handles GET /users/:id requests
 func (h *UserHandler) GetUserByID(c *gin.Context) {
 	ctx, span := h.tracer.Start(c.Request.Context(), "UserHandler.GetUserByID")

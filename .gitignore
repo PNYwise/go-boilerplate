@@ -2,6 +2,8 @@
 .env*
 !.env.stage.example
 
+internal/apps/wire_gen.go
+
 scripts/*
 
 # IDE files

@@ -15,13 +15,14 @@ func RegisterUserRoutes(
 ) {
 	// Group routes with common middleware
 	api := r.Group("/api/v1")
-	
+
 	// Protected user routes with basic auth
 	protectedUserApi := api.Group("/users")
 	protectedUserApi.Use(middlewares.BasicAuthMiddleware(cfg))
 	{
-			protectedUserApi.POST("/", userHandler.CreateUser)
-			protectedUserApi.GET("/:id", userHandler.GetUserByID)
-			protectedUserApi.GET("/username/:username", userHandler.GetUserByUsername)
+		protectedUserApi.POST("with-role", userHandler.CreateUserWithRole)
+		protectedUserApi.POST("/", userHandler.CreateUser)
+		protectedUserApi.GET("/:id", userHandler.GetUserByID)
+		protectedUserApi.GET("/username/:username", userHandler.GetUserByUsername)
 	}
 }
