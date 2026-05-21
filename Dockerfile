@@ -19,6 +19,9 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# example copy the env
+RUN cp /app/.env.stage.example /app/.env
+
 # Generate wire code and build the application
 RUN cd internal/apps && wire
 RUN CGO_ENABLED=0 GOOS=linux go build \
@@ -41,6 +44,7 @@ RUN apk add --no-cache \
 # Set working directory
 WORKDIR /app
 
+#define user
 USER www-data
 
 # Copy binary from builder stage
@@ -50,7 +54,6 @@ COPY --from=builder /app/main .
 COPY --from=builder /app/.env* ./
 
 # Change ownership to non-root user
-
 RUN chown -R www-data:www-data /app
 RUN chmod -R 775 /app
 
