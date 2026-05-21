@@ -6,12 +6,6 @@ FROM golang:1.25-alpine AS builder
 # Install build dependencies
 RUN apk add --no-cache git make
 
-ARG HTTP_PROXY
-ENV http_proxy=$HTTP_PROXY
-
-ARG HTTPS_PROXY
-ENV https_proxy=$HTTPS_PROXY
-
 # Install wire for dependency injection
 RUN go install github.com/google/wire/cmd/wire@latest
 
@@ -65,9 +59,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 USER www-data
-
-ENV http_proxy ""
-ENV https_proxy ""
 
 # Run the application
 CMD ["./main"]
