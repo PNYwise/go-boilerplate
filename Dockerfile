@@ -37,7 +37,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # ------------------------------------------------------------------------------------
 # Stage 2: Runtime (Lightweight final image)
 # ------------------------------------------------------------------------------------
-FROM new-nexus.bri.co.id/mks/base/alpine:3.16 AS runtime
+#FROM new-nexus.bri.co.id/mks/base/alpine:3.16 AS runtime
+
+FROM alpine:3.19
 
 # Install runtime dependencies
 RUN apk add --no-cache \
