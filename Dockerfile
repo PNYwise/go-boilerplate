@@ -31,17 +31,17 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 FROM new-nexus.bri.co.id/mks/base/alpine:3.16 AS runtime
 
 #FROM alpine:3.19 AS runtime
+
 # Install runtime dependencies
 RUN apk add --no-cache \
     ca-certificates \
     tzdata \
     && update-ca-certificates
 
-# Create non-root user for security
-RUN adduser -D -s /bin/sh -u 1001 appuser
-
 # Set working directory
 WORKDIR /app
+
+USER www-data
 
 # Copy binary from builder stage
 COPY --from=builder /app/main .
@@ -50,8 +50,9 @@ COPY --from=builder /app/main .
 COPY --from=builder /app/.env* ./
 
 # Change ownership to non-root user
-RUN chown -R appuser:appuser /app
-USER appuser
+
+RUN chown -R www-data:www-data /app
+RUN chmod -R 775 /app
 
 # Expose port (default from config)
 EXPOSE 8080
