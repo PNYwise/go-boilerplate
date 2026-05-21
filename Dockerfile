@@ -10,7 +10,7 @@ RUN apk add --no-cache git make
 RUN go install github.com/google/wire/cmd/wire@latest
 
 # Set working directory
-WORKDIR /app
+WORKDIR /build
 
 # Copy go mod files first (for better layer caching)
 COPY go.mod go.sum ./
@@ -20,7 +20,7 @@ RUN go mod download
 COPY . .
 
 # example copy the env
-RUN cp /app/.env.stage.example /app/.env
+#RUN cp /app/.env.stage.example /app/.env
 
 # Generate wire code and build the application
 RUN cd internal/apps && wire
@@ -33,8 +33,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # ------------------------------------------------------------------------------------
 FROM new-nexus.bri.co.id/mks/base/alpine:3.16 AS runtime
 
-#FROM alpine:3.19 AS runtime
-
 # Install runtime dependencies
 RUN apk add --no-cache \
     ca-certificates \
@@ -44,14 +42,8 @@ RUN apk add --no-cache \
 # Set working directory
 WORKDIR /app
 
-#define user
-USER www-data
-
 # Copy binary from builder stage
-COPY --from=builder /app/main .
-
-# Copy environment files (optional - for non-Docker environments)
-COPY --from=builder /app/.env* ./
+COPY --from=builder /build/ /app/
 
 # Change ownership to non-root user
 RUN chown -R www-data:www-data /app
@@ -63,6 +55,8 @@ EXPOSE 8080
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+USER www-data
 
 # Run the application
 CMD ["./main"]
