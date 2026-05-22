@@ -48,7 +48,7 @@ RUN adduser -D -s /bin/sh -u 1001 appuser
 WORKDIR /app
 
 # Copy binary from builder stage
-COPY --from=builder /app/main .
+COPY --from=builder /builder/main .
 
 # add dummy .env files (temporary step)
 RUN touch /app/.env
