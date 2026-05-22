@@ -50,8 +50,11 @@ WORKDIR /app
 # Copy binary from builder stage
 COPY --from=builder /app/main .
 
-# Copy environment files (optional - for non-Docker environments)
-COPY --from=builder /app/.env* ./
+# add dummy .env files (temporary step)
+RUN touch /app/.env
+
+## Copy environment files (optional - for non-Docker environments)
+#COPY --from=builder /app/.env* ./
 
 # Change ownership to non-root user
 RUN chown -R appuser:appuser /app
