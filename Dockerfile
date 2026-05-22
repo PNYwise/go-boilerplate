@@ -33,7 +33,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # ------------------------------------------------------------------------------------
 #FROM new-nexus.bri.co.id/mks/base/alpine:3.16 AS runtime
 
-FROM alpine:3.19
+FROM new-nexus.bri.co.id/alpine:3.19 AS runtime
 
 # Install runtime dependencies
 RUN apk add --no-cache \
@@ -41,15 +41,21 @@ RUN apk add --no-cache \
     tzdata \
     && update-ca-certificates
 
+# Create non-root user for security
+RUN adduser -D -s /bin/sh -u 1001 appuser
+
 # Set working directory
 WORKDIR /app
 
 # Copy binary from builder stage
-COPY --from=builder /build/ /app/
+COPY --from=builder /app/main .
+
+# Copy environment files (optional - for non-Docker environments)
+COPY --from=builder /app/.env* ./
 
 # Change ownership to non-root user
-RUN chown -R www-data:www-data /app
-RUN chmod -R 775 /app
+RUN chown -R appuser:appuser /app
+USER appuser
 
 # Expose port (default from config)
 EXPOSE 8080
@@ -58,7 +64,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-USER www-data
-
 # Run the application
-CMD ["./main"]
+CMD ["sh","-c","/app/main"] 
