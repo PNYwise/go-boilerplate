@@ -20,6 +20,7 @@ import (
 // UserService defines user-related business operations
 type UserService interface {
 	CreateUser(ctx context.Context, dto userdtos.UserCreateDTO) (*userdtos.UserResponseDTO, error)
+	GetUserList(ctx context.Context, page, pageSize int) (*userdtos.UserListResponseDTO, error)
 	GetUserByID(ctx context.Context, id int64) (*userdtos.UserResponseDTO, error)
 	DeleteUserByID(ctx context.Context, id int64) (*userdtos.UserResponseDTO, error)
 	GetUserByUsername(ctx context.Context, username string) (*userdtos.UserResponseDTO, error)
@@ -132,6 +133,52 @@ func (s *userService) CreateUser(ctx context.Context, dto userdtos.UserCreateDTO
 		Email:     createdUser.Email,
 		CreatedAt: createdUser.CreatedAt,
 		UpdatedAt: createdUser.UpdatedAt,
+	}, nil
+}
+
+func (s *userService) GetUserList(ctx context.Context, page, pageSize int) (*userdtos.UserListResponseDTO, error) {
+	ctx, span := s.tracer.Start(ctx, "UserService.GetUserList")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int("page", page),
+		attribute.Int("page_size", pageSize),
+	)
+
+	users, totalItems, err := s.userRepo.GetList(ctx, page, pageSize)
+	if err != nil {
+		logs.SpanError(ctx, span, err, "Failed to retrieve user from database")
+		return nil, fmt.Errorf("failed to get user list: %w", err)
+	}
+
+	userResponses := []userdtos.UserResponseDTO{}
+	for _, user := range users {
+		userResponses = append(userResponses, userdtos.UserResponseDTO{
+			ID:        user.ID,
+			Username:  user.Username,
+			Email:     user.Email,
+			CreatedAt: user.CreatedAt,
+			UpdatedAt: user.UpdatedAt,
+		})
+	}
+
+	totalPages := 0
+	if pageSize > 0 {
+		totalPages = int((totalItems + int64(pageSize) - 1) / int64(pageSize))
+	}
+
+	logs.SpanInfo(ctx, span, "User list retrieved successfully",
+		attribute.Int("count", len(userResponses)),
+	)
+
+	return &userdtos.UserListResponseDTO{
+		Users: userResponses,
+		Pagination: userdtos.PaginationMeta{
+			Page:       page,
+			PageSize:   pageSize,
+			TotalItems: totalItems,
+			TotalPages: totalPages,
+		},
 	}, nil
 }
 

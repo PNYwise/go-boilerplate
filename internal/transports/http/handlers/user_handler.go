@@ -88,6 +88,44 @@ func (h *UserHandler) CreateUserWithRole(c *gin.Context) {
 
 }
 
+// GetUserList handles GET /users requests
+func (h *UserHandler) GetUserList(c *gin.Context) {
+	ctx, span := h.tracer.Start(c.Request.Context(), "UserHandler.GetUserList")
+	defer span.End()
+
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "10")
+
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page <= 0 {
+		page = 1
+	}
+
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil || pageSize <= 0 {
+		pageSize = 10
+	}
+
+	span.SetAttributes(
+		attribute.Int("page", page),
+		attribute.Int("page_size", pageSize),
+	)
+
+	users, err := h.userSrv.GetUserList(ctx, page, pageSize)
+	if err != nil {
+		logs.SpanError(ctx, span, err, "Failed to get user list")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Log successful retrieval
+	logs.SpanInfo(ctx, span, "Users retrieved successfully",
+		attribute.Int("total_items", int(users.Pagination.TotalItems)),
+	)
+
+	c.JSON(http.StatusOK, users)
+}
+
 // GetUserByID handles GET /users/:id requests
 func (h *UserHandler) GetUserByID(c *gin.Context) {
 	ctx, span := h.tracer.Start(c.Request.Context(), "UserHandler.GetUserByID")

@@ -18,7 +18,7 @@ type UserRepository interface {
 	DeleteByID(ctx context.Context, id int64) (*entities.User, error)
 	GetByUsername(ctx context.Context, username string) (*entities.User, error)
 	Create(ctx context.Context, tx *sql.Tx, user *entities.User) (int64, error)
-
+	GetList(ctx context.Context, page, pageSize int) ([]entities.User, int64, error)
 }
 
 type userRepository struct {
@@ -164,4 +164,55 @@ func (r *userRepository) Create(ctx context.Context, tx *sql.Tx, user *entities.
 
 	span.SetAttributes(attribute.Int64("user.id", id))
 	return id, nil
+}
+
+func (r *userRepository) GetList(ctx context.Context, page, pageSize int) ([]entities.User, int64, error) {
+	ctx, span := r.tracer.Start(ctx, "UserRepository.GetList")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int("page", page),
+		attribute.Int("page_size", pageSize),
+	)
+
+	// 1. Get total count
+	var totalItems int64
+	countQuery := `SELECT COUNT(*) FROM users`
+	err := r.db.QueryRowContext(ctx, countQuery).Scan(&totalItems)
+	if err != nil {
+		span.RecordError(err)
+		return nil, 0, err
+	}
+
+	if totalItems == 0 {
+		return []entities.User{}, 0, nil
+	}
+
+	// 2. Get the paginated list
+	offset := (page - 1) * pageSize
+	query := `SELECT id, username, email, created_at, updated_at FROM users LIMIT ? OFFSET ?`
+	rows, err := r.db.QueryContext(ctx, query, pageSize, offset)
+	if err != nil {
+		span.RecordError(err)
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var users []entities.User
+	for rows.Next() {
+		var user entities.User
+		err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt)
+		if err != nil {
+			span.RecordError(err)
+			return nil, 0, err
+		}
+		users = append(users, user)
+	}
+
+	if err = rows.Err(); err != nil {
+		span.RecordError(err)
+		return nil, 0, err
+	}
+
+	return users, totalItems, nil
 }
