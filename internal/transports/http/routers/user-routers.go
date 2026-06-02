@@ -23,6 +23,7 @@ func RegisterUserRoutes(
 		protectedUserApi.POST("with-role", userHandler.CreateUserWithRole)
 		protectedUserApi.POST("/", userHandler.CreateUser)
 		protectedUserApi.GET("/:id", userHandler.GetUserByID)
+		protectedUserApi.DELETE("/:id", userHandler.DeleteUserByID)
 		protectedUserApi.GET("/username/:username", userHandler.GetUserByUsername)
 	}
 }

@@ -15,6 +15,7 @@ import (
 // UserRepository defines operations for user data access
 type UserRepository interface {
 	GetByID(ctx context.Context, id int64) (*entities.User, error)
+	DeleteByID(ctx context.Context, id int64) (*entities.User, error)
 	GetByUsername(ctx context.Context, username string) (*entities.User, error)
 	Create(ctx context.Context, tx *sql.Tx, user *entities.User) (int64, error)
 
@@ -52,6 +53,62 @@ func (r *userRepository) GetByID(ctx context.Context, id int64) (*entities.User,
 		return nil, err
 	}
 
+	return &user, nil
+}
+
+func (r *userRepository) DeleteByID(ctx context.Context, id int64) (*entities.User, error) {
+	ctx, span := r.tracer.Start(ctx, "UserRepository.DeleteByID")
+	defer span.End()
+
+	span.SetAttributes(attribute.Int64("user.id", id))
+
+	// 1. Begin the transaction
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+	
+	// Defer a rollback. If tx.Commit() is called successfully later, 
+	// this Rollback does nothing. If the function panics or returns early, it safely aborts.
+	defer tx.Rollback()
+
+	// 2. Select the row and lock it using FOR UPDATE
+	var user entities.User
+	selectQuery := `SELECT id, username, email, created_at, updated_at FROM users WHERE id = ? FOR UPDATE`
+	
+	err = tx.QueryRowContext(ctx, selectQuery, id).Scan(
+		&user.ID, 
+		&user.Username, 
+		&user.Email, 
+		&user.CreatedAt, 
+		&user.UpdatedAt,
+	)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Record doesn't exist, nothing to delete
+			return nil, nil 
+		}
+		span.RecordError(err)
+		return nil, err
+	}
+
+	// 3. Execute the delete operation within the same transaction
+	deleteQuery := `DELETE FROM users WHERE id = ?`
+	_, err = tx.ExecContext(ctx, deleteQuery, id)
+	if err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+
+	// 4. Commit the transaction to finalize the deletion
+	if err = tx.Commit(); err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+
+	// 5. Return the user data we fetched in step 2
 	return &user, nil
 }
 

@@ -21,6 +21,7 @@ import (
 type UserService interface {
 	CreateUser(ctx context.Context, dto userdtos.UserCreateDTO) (*userdtos.UserResponseDTO, error)
 	GetUserByID(ctx context.Context, id int64) (*userdtos.UserResponseDTO, error)
+	DeleteUserByID(ctx context.Context, id int64) (*userdtos.UserResponseDTO, error)
 	GetUserByUsername(ctx context.Context, username string) (*userdtos.UserResponseDTO, error)
 	CreateUserWithRole(ctx context.Context, id int64, dto userdtos.UserCreateDTO) (*userdtos.UserResponseDTO, error)
 }
@@ -237,4 +238,32 @@ func (s *userService) CreateUserWithRole(ctx context.Context, id int64, dto user
 	s.dbtx.CommitTx(tx)
 
 	return nil, nil
+}
+
+func (s *userService) DeleteUserByID(ctx context.Context, id int64) (*userdtos.UserResponseDTO, error) {
+	ctx, span := s.tracer.Start(ctx, "UserService.DeleteUserByID")
+	defer span.End()
+
+	span.SetAttributes(attribute.Int64("user.id", id))
+
+	user, err := s.userRepo.DeleteByID(ctx, id)
+	if err != nil {
+		logs.SpanError(ctx, span, err, "Failed to retrieve user from database",
+			attribute.Int64("user_id", id),
+		)
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	logs.SpanInfo(ctx, span, "User deleted successfully",
+		attribute.Int64("user_id", id),
+		attribute.String("username", user.Username),
+	)
+
+	return &userdtos.UserResponseDTO{
+		ID:        user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+	}, nil
 }

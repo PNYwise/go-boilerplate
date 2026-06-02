@@ -149,3 +149,39 @@ func (h *UserHandler) GetUserByUsername(c *gin.Context) {
 
 	c.JSON(http.StatusOK, user)
 }
+
+// DeleteUserByID handles DELETE /users/:id requests
+func (h *UserHandler) DeleteUserByID(c *gin.Context) {
+	ctx, span := h.tracer.Start(c.Request.Context(), "UserHandler.DeleteUserByID")
+	defer span.End()
+
+	idStr := c.Param("id")
+
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		logs.SpanError(ctx, span, err, "Invalid user ID format",
+			attribute.String("user_id_param", idStr),
+		)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+		return
+	}
+
+	span.SetAttributes(attribute.Int64("user.id", id))
+
+	user, err := h.userSrv.DeleteUserByID(ctx, id)
+	if err != nil {
+		logs.SpanError(ctx, span, err, "Failed to delete user by ID",
+			attribute.Int64("user_id", id),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Log successful retrieval
+	logs.SpanInfo(ctx, span, "User deleted successfully",
+		attribute.Int64("user_id", user.ID),
+		attribute.String("username", user.Username),
+	)
+
+	c.JSON(http.StatusOK, user)
+}
