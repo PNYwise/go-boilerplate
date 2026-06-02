@@ -22,6 +22,7 @@ type UserService interface {
 	CreateUser(ctx context.Context, dto userdtos.UserCreateDTO) (*userdtos.UserResponseDTO, error)
 	GetUserList(ctx context.Context, page, pageSize int) (*userdtos.UserListResponseDTO, error)
 	GetUserByID(ctx context.Context, id int64) (*userdtos.UserResponseDTO, error)
+	UpdateUserByID(ctx context.Context, id int64, dto userdtos.UserUpdateDTO) (*userdtos.UserResponseDTO, error)
 	DeleteUserByID(ctx context.Context, id int64) (*userdtos.UserResponseDTO, error)
 	GetUserByUsername(ctx context.Context, username string) (*userdtos.UserResponseDTO, error)
 	CreateUserWithRole(ctx context.Context, id int64, dto userdtos.UserCreateDTO) (*userdtos.UserResponseDTO, error)
@@ -303,6 +304,109 @@ func (s *userService) DeleteUserByID(ctx context.Context, id int64) (*userdtos.U
 
 	logs.SpanInfo(ctx, span, "User deleted successfully",
 		attribute.Int64("user_id", id),
+		attribute.String("username", user.Username),
+	)
+
+	return &userdtos.UserResponseDTO{
+		ID:        user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+	}, nil
+}
+
+func (s *userService) UpdateUserByID(ctx context.Context, id int64, dto userdtos.UserUpdateDTO) (*userdtos.UserResponseDTO, error) {
+	ctx, span := s.tracer.Start(ctx, "UserService.UpdateUserByID")
+	defer span.End()
+
+	span.SetAttributes(attribute.Int64("user.id", id))
+
+	// 1. Validate DTO
+	if err := s.v.Struct(dto); err != nil {
+		logs.SpanError(ctx, span, err, "User update validation failed")
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
+	// 2. Fetch existing user
+	user, err := s.userRepo.GetByID(ctx, id)
+	if err != nil {
+		logs.SpanError(ctx, span, err, "Failed to retrieve user from database", attribute.Int64("user_id", id))
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	if user == nil {
+		err := fmt.Errorf("user with ID %d not found", id)
+		logs.SpanWarn(ctx, span, "User not found", attribute.Int64("user_id", id))
+		return nil, err
+	}
+
+	// 3. Uniqueness checks and value setting
+	hasChanges := false
+
+	if dto.Username != nil && *dto.Username != "" && *dto.Username != user.Username {
+		existing, err := s.userRepo.GetByUsername(ctx, *dto.Username)
+		if err != nil {
+			logs.SpanError(ctx, span, err, "Failed to check existing username")
+			return nil, fmt.Errorf("failed to check username: %w", err)
+		}
+		if existing != nil && existing.ID != user.ID {
+			err := fmt.Errorf("username '%s' already exists", *dto.Username)
+			logs.SpanWarn(ctx, span, "Username already exists", attribute.String("username", *dto.Username))
+			return nil, err
+		}
+		user.Username = *dto.Username
+		hasChanges = true
+	}
+
+	if dto.Email != nil && *dto.Email != "" && *dto.Email != user.Email {
+		existing, err := s.userRepo.GetByEmail(ctx, *dto.Email)
+		if err != nil {
+			logs.SpanError(ctx, span, err, "Failed to check existing email")
+			return nil, fmt.Errorf("failed to check email: %w", err)
+		}
+		if existing != nil && existing.ID != user.ID {
+			err := fmt.Errorf("email '%s' already exists", *dto.Email)
+			logs.SpanWarn(ctx, span, "Email already exists", attribute.String("email", *dto.Email))
+			return nil, err
+		}
+		user.Email = *dto.Email
+		hasChanges = true
+	}
+
+	// 4. Perform update within transaction if there are changes
+	if hasChanges {
+		tx, err := s.dbtx.InitTx(ctx, nil)
+		if err != nil {
+			logs.SpanError(ctx, span, err, "Failed to initialize transaction")
+			return nil, fmt.Errorf("failed to initialize transaction: %w", err)
+		}
+		defer func() {
+			if err != nil {
+				s.dbtx.RollbackTx(tx)
+			}
+		}()
+
+		err = s.userRepo.Update(ctx, tx, user)
+		if err != nil {
+			logs.SpanError(ctx, span, err, "Failed to update user in database")
+			return nil, fmt.Errorf("failed to update user: %w", err)
+		}
+
+		s.dbtx.CommitTx(tx)
+
+		// Get updated user to return complete data
+		updatedUser, err := s.userRepo.GetByID(ctx, id)
+		if err != nil {
+			logs.SpanError(ctx, span, err, "Failed to retrieve updated user",
+				attribute.Int64("user_id", id),
+			)
+			return nil, fmt.Errorf("failed to retrieve updated user: %w", err)
+		}
+		user = updatedUser
+	}
+
+	logs.SpanInfo(ctx, span, "User updated successfully",
+		attribute.Int64("user_id", user.ID),
 		attribute.String("username", user.Username),
 	)
 

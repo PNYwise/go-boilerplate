@@ -223,3 +223,51 @@ func (h *UserHandler) DeleteUserByID(c *gin.Context) {
 
 	c.JSON(http.StatusOK, user)
 }
+
+// UpdateUserByID handles PUT /users/:id requests
+func (h *UserHandler) UpdateUserByID(c *gin.Context) {
+	ctx, span := h.tracer.Start(c.Request.Context(), "UserHandler.UpdateUserByID")
+	defer span.End()
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		logs.SpanError(ctx, span, err, "Invalid user ID format",
+			attribute.String("user_id_param", idStr),
+		)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+		return
+	}
+
+	span.SetAttributes(attribute.Int64("user.id", id))
+
+	var req userdtos.UserUpdateDTO
+	if err := c.BindJSON(&req); err != nil {
+		logs.SpanError(ctx, span, err, "Failed to bind JSON request")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Username != nil {
+		span.SetAttributes(attribute.String("user.new_username", *req.Username))
+	}
+	if req.Email != nil {
+		span.SetAttributes(attribute.String("user.new_email", *req.Email))
+	}
+
+	user, err := h.userSrv.UpdateUserByID(ctx, id, req)
+	if err != nil {
+		logs.SpanError(ctx, span, err, "Failed to update user",
+			attribute.Int64("user_id", id),
+		)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	logs.SpanInfo(ctx, span, "User updated successfully",
+		attribute.Int64("user_id", user.ID),
+		attribute.String("username", user.Username),
+	)
+
+	c.JSON(http.StatusOK, user)
+}

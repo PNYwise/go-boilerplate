@@ -17,7 +17,9 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id int64) (*entities.User, error)
 	DeleteByID(ctx context.Context, id int64) (*entities.User, error)
 	GetByUsername(ctx context.Context, username string) (*entities.User, error)
+	GetByEmail(ctx context.Context, email string) (*entities.User, error)
 	Create(ctx context.Context, tx *sql.Tx, user *entities.User) (int64, error)
+	Update(ctx context.Context, tx *sql.Tx, user *entities.User) error
 	GetList(ctx context.Context, page, pageSize int) ([]entities.User, int64, error)
 }
 
@@ -215,4 +217,54 @@ func (r *userRepository) GetList(ctx context.Context, page, pageSize int) ([]ent
 	}
 
 	return users, totalItems, nil
+}
+
+func (r *userRepository) GetByEmail(ctx context.Context, email string) (*entities.User, error) {
+	ctx, span := r.tracer.Start(ctx, "UserRepository.GetByEmail")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("user.email", email))
+
+	query := `SELECT id, username, email, created_at, updated_at FROM users WHERE email = ?`
+	row := r.db.QueryRowContext(ctx, query, email)
+
+	var user entities.User
+	err := row.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		span.RecordError(err)
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func (r *userRepository) Update(ctx context.Context, tx *sql.Tx, user *entities.User) error {
+	ctx, span := r.tracer.Start(ctx, "UserRepository.Update")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int64("user.id", user.ID),
+		attribute.String("user.username", user.Username),
+		attribute.String("user.email", user.Email),
+	)
+
+	query := `UPDATE users SET username = ?, email = ?, updated_at = ? WHERE id = ?`
+	now := time.Now()
+
+	var err error
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, query, user.Username, user.Email, now, user.ID)
+	} else {
+		_, err = r.db.ExecContext(ctx, query, user.Username, user.Email, now, user.ID)
+	}
+
+	if err != nil {
+		span.RecordError(err)
+		return err
+	}
+
+	return nil
 }

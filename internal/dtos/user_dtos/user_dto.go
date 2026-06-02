@@ -8,6 +8,12 @@ type UserCreateDTO struct {
 	Email    string `json:"email" validate:"required,email"`
 }
 
+// UserUpdateDTO represents data for updating a user
+type UserUpdateDTO struct {
+	Username *string `json:"username" validate:"omitempty,min=3,max=50"`
+	Email    *string `json:"email" validate:"omitempty,email"`
+}
+
 // UserResponseDTO represents user data in response
 type UserResponseDTO struct {
 	ID        int64     `json:"id"`
