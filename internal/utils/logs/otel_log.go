@@ -306,10 +306,16 @@ func logStructured(ctx context.Context, level LogLevel, message string, errorInf
 	}
 
 	// Automatically calculate and inject http.duration for every log if StartTimeKey is present
-	if start, ok := ctx.Value(StartTimeKey).(time.Time); ok {
-		if _, exists := attributes["http.duration"]; !exists {
-			attributes["http.duration"] = time.Since(start).String()
-		}
+	var durationStr string
+	if d, ok := attributes["http.duration"].(string); ok {
+		durationStr = d
+	} else if start, ok := ctx.Value(StartTimeKey).(time.Time); ok {
+		durationStr = time.Since(start).String()
+		attributes["http.duration"] = durationStr
+	}
+
+	if durationStr != "" {
+		message = fmt.Sprintf("%s - %s", message, durationStr)
 	}
 
 	if globalLogger != nil {
