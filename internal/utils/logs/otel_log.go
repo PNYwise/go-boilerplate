@@ -273,7 +273,6 @@ func logStructured(ctx context.Context, level LogLevel, message string, errorInf
 	if span.SpanContext().IsValid() {
 		traceID = span.SpanContext().TraceID().String()
 		spanID = span.SpanContext().SpanID().String()
-		message = fmt.Sprintf("[%s] %s", traceID, message)
 	}
 
 	attributes := make(map[string]interface{}, len(attrs))

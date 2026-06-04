@@ -67,15 +67,15 @@ func RequestLogger() gin.HandlerFunc {
 		c.Request = c.Request.WithContext(ctx)
 
 		// 4. Gather Request Headers
-		var reqHeadersBuilder strings.Builder
-		for k, v := range c.Request.Header {
-			if len(v) > 0 {
-				reqHeadersBuilder.WriteString(k)
-				reqHeadersBuilder.WriteString("=")
-				reqHeadersBuilder.WriteString(v[0])
-				reqHeadersBuilder.WriteString(";")
-			}
-		}
+		// var reqHeadersBuilder strings.Builder
+		// for k, v := range c.Request.Header {
+		// 	if len(v) > 0 {
+		// 		reqHeadersBuilder.WriteString(k)
+		// 		reqHeadersBuilder.WriteString("=")
+		// 		reqHeadersBuilder.WriteString(v[0])
+		// 		reqHeadersBuilder.WriteString(";")
+		// 	}
+		// }
 
 		// 5. Read request body (for application/json, log up to 4KB)
 		var bodyStr string
@@ -100,9 +100,9 @@ func RequestLogger() gin.HandlerFunc {
 			attribute.String("http.client_ip", c.ClientIP()),
 			attribute.String("http.user_agent", c.Request.UserAgent()),
 		}
-		if reqHeadersBuilder.Len() > 0 {
-			startAttrs = append(startAttrs, attribute.String("http.request.headers", reqHeadersBuilder.String()))
-		}
+		// if reqHeadersBuilder.Len() > 0 {
+		// 	startAttrs = append(startAttrs, attribute.String("http.request.headers", reqHeadersBuilder.String()))
+		// }
 		if bodyStr != "" {
 			startAttrs = append(startAttrs, attribute.String("http.request.body", bodyStr))
 		}
@@ -119,15 +119,15 @@ func RequestLogger() gin.HandlerFunc {
 		duration := time.Since(start)
 
 		// Gather response headers
-		var resHeadersBuilder strings.Builder
-		for k, v := range c.Writer.Header() {
-			if len(v) > 0 {
-				resHeadersBuilder.WriteString(k)
-				resHeadersBuilder.WriteString("=")
-				resHeadersBuilder.WriteString(v[0])
-				resHeadersBuilder.WriteString(";")
-			}
-		}
+		// var resHeadersBuilder strings.Builder
+		// for k, v := range c.Writer.Header() {
+		// 	if len(v) > 0 {
+		// 		resHeadersBuilder.WriteString(k)
+		// 		resHeadersBuilder.WriteString("=")
+		// 		resHeadersBuilder.WriteString(v[0])
+		// 		resHeadersBuilder.WriteString(";")
+		// 	}
+		// }
 
 		resBodyStr := ""
 		resContentType := c.Writer.Header().Get("Content-Type")
@@ -144,14 +144,14 @@ func RequestLogger() gin.HandlerFunc {
 			attribute.String("http.duration", duration.String()),
 		}
 
-		if resHeadersBuilder.Len() > 0 {
-			endAttrs = append(endAttrs, attribute.String("http.response.headers", resHeadersBuilder.String()))
-		}
+		// if resHeadersBuilder.Len() > 0 {
+		// 	endAttrs = append(endAttrs, attribute.String("http.response.headers", resHeadersBuilder.String()))
+		// }
 		if resBodyStr != "" {
 			endAttrs = append(endAttrs, attribute.String("http.response.body", resBodyStr))
 		}
 
 		// Log using existing utility
-		logs.LogInfo(ctx, fmt.Sprintf("HTTP Request Completed: %d", c.Writer.Status()), endAttrs...)
+		logs.LogInfo(ctx, fmt.Sprintf("HTTP Request Completed: %d %s", c.Writer.Status(), c.Request.URL.Path), endAttrs...)
 	}
 }
