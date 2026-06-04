@@ -49,11 +49,14 @@ type Config struct {
 	DbWriteTimeout int // seconds
 
 	// OpenTelemetry Configuration
+	OtelEnabled        bool
 	OtelServiceVersion string
 	OtelEnvironment    string
 	OtelServiceNodeName string
 	OtelOtlpEndpoint   string
 	OtelOtlpHeaders    map[string]string
+
+	LogLevel string
 
 	AppName  string
 	HTTPAddr string
@@ -87,11 +90,14 @@ func MustLoad(stage string) Config {
 		DbWriteTimeout: getenvInt("DB_WRITE_TIMEOUT", 5),
 
 		// OpenTelemetry Configuration
+		OtelEnabled:        getenvBool("OTEL_ENABLED", false),
 		OtelServiceVersion: getenv("OTEL_SERVICE_VERSION", "1.0.0"),
 		OtelEnvironment:    getenv("OTEL_ENVIRONMENT", "development"),
 		OtelServiceNodeName: getenv("OTEL_SERVICE_NODE_NAME", hostnameOrEmpty()),
 		OtelOtlpEndpoint:   getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
 		OtelOtlpHeaders:    parseHeaders(getenv("OTEL_EXPORTER_OTLP_HEADERS", "")),
+
+		LogLevel:           getenv("LOG_LEVEL", ""),
 
 		CorsAllowedOrigins: splitCSVDefault(getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"), []string{"http://localhost:3000"}),
 		AppName:  getenv("APP_NAME", "example"),

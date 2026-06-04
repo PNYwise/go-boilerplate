@@ -340,6 +340,8 @@ func (s *userService) UpdateUserByID(ctx context.Context, id int64, dto userdtos
 		return nil, err
 	}
 
+	logs.SpanInfo(ctx, span, "User retrieved successfully", attribute.Int64("user_id", id), attribute.String("username", user.Username))
+
 	// 3. Uniqueness checks and value setting
 	hasChanges := false
 
