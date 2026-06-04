@@ -17,9 +17,9 @@ import (
 	otelruntime "go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -119,18 +119,20 @@ func InitializeOpenTelemetry(cfg configs.Config) (func(), error) {
 	var logExporter sdklog.Exporter
 
 	if cfg.OtelEnabled && strings.TrimSpace(cfg.OtelOtlpEndpoint) != "" {
-		traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(cfg.OtelOtlpEndpoint), otlptracegrpc.WithInsecure())
+		baseURL := strings.TrimRight(strings.TrimSpace(cfg.OtelOtlpEndpoint), "/")
+
+		traceExporter, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(baseURL+"/v1/traces"), otlptracehttp.WithInsecure())
 		if err != nil {
 			return nil, fmt.Errorf("build trace exporter: %w", err)
 		}
 		spanProcessors = append(spanProcessors, sdktrace.NewBatchSpanProcessor(traceExporter))
 
-		logExporter, err = otlploggrpc.New(ctx, otlploggrpc.WithEndpoint(cfg.OtelOtlpEndpoint), otlploggrpc.WithInsecure())
+		logExporter, err = otlploghttp.New(ctx, otlploghttp.WithEndpointURL(baseURL+"/v1/logs"), otlploghttp.WithInsecure())
 		if err != nil {
 			return nil, fmt.Errorf("build log exporter: %w", err)
 		}
 
-		metricExporter, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithEndpoint(cfg.OtelOtlpEndpoint), otlpmetricgrpc.WithInsecure())
+		metricExporter, err := otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpointURL(baseURL+"/v1/metrics"), otlpmetrichttp.WithInsecure())
 		if err != nil {
 			return nil, fmt.Errorf("build metric exporter: %w", err)
 		}
@@ -205,7 +207,9 @@ func initializeZapLogger(cfg configs.Config, res *resource.Resource, logExporter
 
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = "@timestamp"
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+		enc.AppendString(t.UTC().Format("2006-01-02T15:04:05.000Z"))
+	}
 
 	stdoutCore := zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(os.Stdout), level)
 	var cores []zapcore.Core = []zapcore.Core{stdoutCore}
@@ -287,7 +291,10 @@ func logStructured(ctx context.Context, level LogLevel, message string, errorInf
 		fields := []zap.Field{
 			zap.String("trace.id", traceID),
 			zap.String("span.id", spanID),
-			zap.Any("attributes", attributes),
+		}
+		
+		for k, v := range attributes {
+			fields = append(fields, zap.Any(k, v))
 		}
 
 		if errorInfo != nil {
