@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rs/xid"
 	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
 
 	"go-boilerplate/internal/utils/logs"
 )
@@ -48,21 +48,20 @@ func RequestLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 
-		// 1. Generate or extract Trace ID
-		traceID := c.GetHeader("X-Trace-Id")
-		if traceID == "" {
-			traceID = "TID-" + xid.New().String()
+		// 1. Retrieve OTEL context created by otelgin middleware
+		ctx := c.Request.Context()
+		span := oteltrace.SpanFromContext(ctx)
+		var traceID string
+		if span.SpanContext().IsValid() {
+			traceID = span.SpanContext().TraceID().String()
 		}
 
-		// Generate Span ID
-		spanID := "SID-" + xid.New().String()
-
 		// 2. Set Trace ID to response headers
-		c.Writer.Header().Set("X-Trace-Id", traceID)
+		if traceID != "" {
+			c.Writer.Header().Set("X-Trace-Id", traceID)
+		}
 
-		// 3. Inject Trace ID, Span ID, and Start Time into deep Go context
-		ctx := context.WithValue(c.Request.Context(), logs.TraceIDKey, traceID)
-		ctx = context.WithValue(ctx, logs.SpanIDKey, spanID)
+		// 3. Inject Start Time into context for duration calculations
 		ctx = context.WithValue(ctx, logs.StartTimeKey, start)
 		c.Request = c.Request.WithContext(ctx)
 

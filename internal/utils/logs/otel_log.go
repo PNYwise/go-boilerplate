@@ -34,13 +34,9 @@ import (
 // LogLevel represents log level enumeration
 type LogLevel string
 
-type traceIDKeyType struct{}
-type spanIDKeyType struct{}
 type startTimeKeyType struct{}
 
-// Keys to store trace and span IDs in context when OpenTelemetry is disabled
-var TraceIDKey = traceIDKeyType{}
-var SpanIDKey = spanIDKeyType{}
+// Keys to store context
 var StartTimeKey = startTimeKeyType{}
 
 const (
@@ -104,14 +100,6 @@ func InitializeOpenTelemetry(cfg configs.Config) (func(), error) {
 	ctx := context.Background()
 	serviceConfig = cfg
 
-	if !cfg.OtelEnabled {
-		if err := initializeZapLogger(cfg, nil, nil); err != nil {
-			return nil, err
-		}
-		globalLogger.Info("Running WITHOUT OpenTelemetry (OTEL_ENABLED is false)")
-		return func() {}, nil
-	}
-
 	res, err := resource.New(ctx,
 		resource.WithTelemetrySDK(),
 		resource.WithAttributes(
@@ -127,53 +115,58 @@ func InitializeOpenTelemetry(cfg configs.Config) (func(), error) {
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	if strings.TrimSpace(cfg.OtelOtlpEndpoint) == "" {
-		if err := initializeZapLogger(cfg, nil, nil); err != nil {
-			return nil, err
+	var spanProcessors []sdktrace.SpanProcessor
+	var logExporter sdklog.Exporter
+
+	if cfg.OtelEnabled && strings.TrimSpace(cfg.OtelOtlpEndpoint) != "" {
+		traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(cfg.OtelOtlpEndpoint), otlptracegrpc.WithInsecure())
+		if err != nil {
+			return nil, fmt.Errorf("build trace exporter: %w", err)
 		}
-		globalLogger.Info("Running WITHOUT OpenTelemetry (OTLP Endpoint empty)")
-		return func() {}, nil
+		spanProcessors = append(spanProcessors, sdktrace.NewBatchSpanProcessor(traceExporter))
+
+		logExporter, err = otlploggrpc.New(ctx, otlploggrpc.WithEndpoint(cfg.OtelOtlpEndpoint), otlploggrpc.WithInsecure())
+		if err != nil {
+			return nil, fmt.Errorf("build log exporter: %w", err)
+		}
+
+		metricExporter, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithEndpoint(cfg.OtelOtlpEndpoint), otlpmetricgrpc.WithInsecure())
+		if err != nil {
+			return nil, fmt.Errorf("build metric exporter: %w", err)
+		}
+
+		metricProvider := sdkmetric.NewMeterProvider(
+			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter, sdkmetric.WithInterval(15*time.Second))),
+			sdkmetric.WithResource(res),
+		)
+		otel.SetMeterProvider(metricProvider)
+
+		if err := otelruntime.Start(otelruntime.WithMeterProvider(metricProvider)); err != nil {
+			return nil, fmt.Errorf("start runtime metrics: %w", err)
+		}
 	}
 
-	traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(cfg.OtelOtlpEndpoint), otlptracegrpc.WithInsecure())
-	if err != nil {
-		return nil, fmt.Errorf("build trace exporter: %w", err)
-	}
-
-	logExporter, err := otlploggrpc.New(ctx, otlploggrpc.WithEndpoint(cfg.OtelOtlpEndpoint), otlploggrpc.WithInsecure())
-	if err != nil {
-		return nil, fmt.Errorf("build log exporter: %w", err)
-	}
-
-	metricExporter, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithEndpoint(cfg.OtelOtlpEndpoint), otlpmetricgrpc.WithInsecure())
-	if err != nil {
-		return nil, fmt.Errorf("build metric exporter: %w", err)
-	}
-
-	tracerProvider = sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(traceExporter),
+	opts := []sdktrace.TracerProviderOption{
 		sdktrace.WithResource(res),
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-	)
-
-	metricProvider := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter, sdkmetric.WithInterval(15*time.Second))),
-		sdkmetric.WithResource(res),
-	)
-
-	otel.SetTracerProvider(tracerProvider)
-	otel.SetMeterProvider(metricProvider)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
-
-	if err := otelruntime.Start(otelruntime.WithMeterProvider(metricProvider)); err != nil {
-		return nil, fmt.Errorf("start runtime metrics: %w", err)
 	}
+	for _, sp := range spanProcessors {
+		opts = append(opts, sdktrace.WithSpanProcessor(sp))
+	}
+
+	tracerProvider = sdktrace.NewTracerProvider(opts...)
+	otel.SetTracerProvider(tracerProvider)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
 	if err := initializeZapLogger(cfg, res, logExporter); err != nil {
 		return nil, fmt.Errorf("failed to initialize Zap logger: %w", err)
 	}
 
-	globalLogger.Info("OpenTelemetry initialized (sending data to Collector only)")
+	if cfg.OtelEnabled && strings.TrimSpace(cfg.OtelOtlpEndpoint) != "" {
+		globalLogger.Info("OpenTelemetry initialized WITH exporter (sending data to Collector)")
+	} else {
+		globalLogger.Info("Running WITHOUT OpenTelemetry exporter (local span generation only)")
+	}
 
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -276,17 +269,6 @@ func logStructured(ctx context.Context, level LogLevel, message string, errorInf
 	if span.SpanContext().IsValid() {
 		traceID = span.SpanContext().TraceID().String()
 		spanID = span.SpanContext().SpanID().String()
-	}
-
-	if traceID == "" {
-		if tid, ok := ctx.Value(TraceIDKey).(string); ok && tid != "" {
-			traceID = tid
-		}
-	}
-	if spanID == "" {
-		if sid, ok := ctx.Value(SpanIDKey).(string); ok && sid != "" {
-			spanID = sid
-		}
 	}
 
 	attributes := make(map[string]interface{}, len(attrs))
