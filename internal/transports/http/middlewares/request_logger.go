@@ -3,6 +3,7 @@ package middlewares
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -105,7 +106,7 @@ func RequestLogger() gin.HandlerFunc {
 		if bodyStr != "" {
 			startAttrs = append(startAttrs, attribute.String("http.request.body", bodyStr))
 		}
-		logs.LogInfo(ctx, "HTTP Request Started", startAttrs...)
+		logs.LogInfo(ctx, fmt.Sprintf("HTTP Request Started: %s %s", c.Request.Method, c.Request.URL.Path), startAttrs...)
 
 		// 7. Setup response body interceptor
 		w := &responseBodyWriter{body: &bytes.Buffer{}, ResponseWriter: c.Writer}
@@ -151,6 +152,6 @@ func RequestLogger() gin.HandlerFunc {
 		}
 
 		// Log using existing utility
-		logs.LogInfo(ctx, "HTTP Request Completed", endAttrs...)
+		logs.LogInfo(ctx, fmt.Sprintf("HTTP Request Completed: %d", c.Writer.Status()), endAttrs...)
 	}
 }
