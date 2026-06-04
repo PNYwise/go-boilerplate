@@ -17,8 +17,11 @@ import (
 	otelruntime "go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -121,21 +124,43 @@ func InitializeOpenTelemetry(cfg configs.Config) (func(), error) {
 	if cfg.OtelEnabled && strings.TrimSpace(cfg.OtelOtlpEndpoint) != "" {
 		baseURL := strings.TrimRight(strings.TrimSpace(cfg.OtelOtlpEndpoint), "/")
 
-		traceExporter, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(baseURL+"/v1/traces"), otlptracehttp.WithInsecure())
-		if err != nil {
-			return nil, fmt.Errorf("build trace exporter: %w", err)
+		var traceExporter sdktrace.SpanExporter
+		var metricExporter sdkmetric.Exporter
+		var err error
+
+		if strings.ToLower(cfg.OtelProtocol) == "grpc" {
+			traceExporter, err = otlptracegrpc.New(ctx, otlptracegrpc.WithEndpointURL(baseURL), otlptracegrpc.WithInsecure())
+			if err != nil {
+				return nil, fmt.Errorf("build grpc trace exporter: %w", err)
+			}
+
+			logExporter, err = otlploggrpc.New(ctx, otlploggrpc.WithEndpointURL(baseURL), otlploggrpc.WithInsecure())
+			if err != nil {
+				return nil, fmt.Errorf("build grpc log exporter: %w", err)
+			}
+
+			metricExporter, err = otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithEndpointURL(baseURL), otlpmetricgrpc.WithInsecure())
+			if err != nil {
+				return nil, fmt.Errorf("build grpc metric exporter: %w", err)
+			}
+		} else {
+			traceExporter, err = otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(baseURL+"/v1/traces"), otlptracehttp.WithInsecure())
+			if err != nil {
+				return nil, fmt.Errorf("build http trace exporter: %w", err)
+			}
+
+			logExporter, err = otlploghttp.New(ctx, otlploghttp.WithEndpointURL(baseURL+"/v1/logs"), otlploghttp.WithInsecure())
+			if err != nil {
+				return nil, fmt.Errorf("build http log exporter: %w", err)
+			}
+
+			metricExporter, err = otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpointURL(baseURL+"/v1/metrics"), otlpmetrichttp.WithInsecure())
+			if err != nil {
+				return nil, fmt.Errorf("build http metric exporter: %w", err)
+			}
 		}
+
 		spanProcessors = append(spanProcessors, sdktrace.NewBatchSpanProcessor(traceExporter))
-
-		logExporter, err = otlploghttp.New(ctx, otlploghttp.WithEndpointURL(baseURL+"/v1/logs"), otlploghttp.WithInsecure())
-		if err != nil {
-			return nil, fmt.Errorf("build log exporter: %w", err)
-		}
-
-		metricExporter, err := otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpointURL(baseURL+"/v1/metrics"), otlpmetrichttp.WithInsecure())
-		if err != nil {
-			return nil, fmt.Errorf("build metric exporter: %w", err)
-		}
 
 		metricProvider := sdkmetric.NewMeterProvider(
 			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter, sdkmetric.WithInterval(15*time.Second))),

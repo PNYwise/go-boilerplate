@@ -55,6 +55,7 @@ type Config struct {
 	OtelServiceNodeName string
 	OtelOtlpEndpoint   string
 	OtelOtlpHeaders    map[string]string
+	OtelProtocol       string
 
 	LogLevel string
 
@@ -96,6 +97,7 @@ func MustLoad(stage string) Config {
 		OtelServiceNodeName: getenv("OTEL_SERVICE_NODE_NAME", hostnameOrEmpty()),
 		OtelOtlpEndpoint:   getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
 		OtelOtlpHeaders:    parseHeaders(getenv("OTEL_EXPORTER_OTLP_HEADERS", "")),
+		OtelProtocol:       getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http"),
 
 		LogLevel:           getenv("LOG_LEVEL", ""),
 
