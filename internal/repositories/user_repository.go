@@ -70,27 +70,27 @@ func (r *userRepository) DeleteByID(ctx context.Context, id int64) (*entities.Us
 		span.RecordError(err)
 		return nil, err
 	}
-	
-	// Defer a rollback. If tx.Commit() is called successfully later, 
+
+	// Defer a rollback. If tx.Commit() is called successfully later,
 	// this Rollback does nothing. If the function panics or returns early, it safely aborts.
 	defer tx.Rollback()
 
 	// 2. Select the row and lock it using FOR UPDATE
 	var user entities.User
 	selectQuery := `SELECT id, username, email, created_at, updated_at FROM users WHERE id = ? FOR UPDATE`
-	
+
 	err = tx.QueryRowContext(ctx, selectQuery, id).Scan(
-		&user.ID, 
-		&user.Username, 
-		&user.Email, 
-		&user.CreatedAt, 
+		&user.ID,
+		&user.Username,
+		&user.Email,
+		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// Record doesn't exist, nothing to delete
-			return nil, nil 
+			return nil, nil
 		}
 		span.RecordError(err)
 		return nil, err
@@ -155,7 +155,7 @@ func (r *userRepository) Create(ctx context.Context, tx *sql.Tx, user *entities.
 		)
 		return 0, err
 	}
-	
+
 	id, err := result.LastInsertId()
 	if err != nil {
 		logs.SpanError(ctx, span, err, "Failed to get last insert ID",

@@ -80,15 +80,15 @@ func NewMySQLDB(cfg configs.Config) (*sql.DB, func(), error) {
 	// Register database connection pool metrics for monitoring
 	// This tracks connection pool stats (idle, in-use, wait count) in OpenTelemetry metrics
 	closeFunc, err := otelsql.RegisterDBStatsMetrics(db, otelsql.WithAttributes(
-     attribute.String("db.system", "mysql"),                      // Database type
-        attribute.String("db.name", cfg.DbName),                     // Database name
-        attribute.String("db.user", cfg.DbUser),                     // Database user
-        attribute.String("server.address", cfg.DbHost),              // Database host
-        attribute.Int("server.port", cfg.DbPort),                    // Database port
-        attribute.String("service.name", cfg.AppName),       // Service name for correlation
-        attribute.String("service.version", cfg.OtelServiceVersion), // Service version
-        attribute.String("deployment.environment", cfg.OtelEnvironment), // Environment (dev/prod)
-	));
+		attribute.String("db.system", "mysql"),                          // Database type
+		attribute.String("db.name", cfg.DbName),                         // Database name
+		attribute.String("db.user", cfg.DbUser),                         // Database user
+		attribute.String("server.address", cfg.DbHost),                  // Database host
+		attribute.Int("server.port", cfg.DbPort),                        // Database port
+		attribute.String("service.name", cfg.AppName),                   // Service name for correlation
+		attribute.String("service.version", cfg.OtelServiceVersion),     // Service version
+		attribute.String("deployment.environment", cfg.OtelEnvironment), // Environment (dev/prod)
+	))
 	if err != nil {
 		log.Printf("Warning: failed to register DB stats metrics: %v", err)
 	}

@@ -265,11 +265,31 @@ func initializeZapLogger(cfg configs.Config, res *resource.Resource, logExporter
 }
 
 // Convenience global logging functions
-func Info(msg string, fields ...zap.Field)  { if skip1Logger != nil { skip1Logger.Info(msg, fields...) } }
-func Debug(msg string, fields ...zap.Field) { if skip1Logger != nil { skip1Logger.Debug(msg, fields...) } }
-func Warn(msg string, fields ...zap.Field)  { if skip1Logger != nil { skip1Logger.Warn(msg, fields...) } }
-func Error(msg string, fields ...zap.Field) { if skip1Logger != nil { skip1Logger.Error(msg, fields...) } }
-func Fatal(msg string, fields ...zap.Field) { if skip1Logger != nil { skip1Logger.Fatal(msg, fields...) } }
+func Info(msg string, fields ...zap.Field) {
+	if skip1Logger != nil {
+		skip1Logger.Info(msg, fields...)
+	}
+}
+func Debug(msg string, fields ...zap.Field) {
+	if skip1Logger != nil {
+		skip1Logger.Debug(msg, fields...)
+	}
+}
+func Warn(msg string, fields ...zap.Field) {
+	if skip1Logger != nil {
+		skip1Logger.Warn(msg, fields...)
+	}
+}
+func Error(msg string, fields ...zap.Field) {
+	if skip1Logger != nil {
+		skip1Logger.Error(msg, fields...)
+	}
+}
+func Fatal(msg string, fields ...zap.Field) {
+	if skip1Logger != nil {
+		skip1Logger.Fatal(msg, fields...)
+	}
+}
 
 // LogInfo creates a structured log entry and outputs it as JSON
 func LogInfo(ctx context.Context, message string, attrs ...attribute.KeyValue) {
@@ -323,7 +343,7 @@ func logStructured(ctx context.Context, level LogLevel, message string, errorInf
 			zap.String("trace.id", traceID),
 			zap.String("span.id", spanID),
 		}
-		
+
 		for k, v := range attributes {
 			fields = append(fields, zap.Any(k, v))
 		}
@@ -345,13 +365,13 @@ func logStructured(ctx context.Context, level LogLevel, message string, errorInf
 	} else {
 		// Absolute Fallback
 		logEntry := StructuredLog{
-			Timestamp:   time.Now().UTC(),
-			Level:       level,
-			Message:     message,
-			TraceID:     traceID,
-			SpanID:      spanID,
-			Attributes:  attributes,
-			Error:       errorInfo,
+			Timestamp:  time.Now().UTC(),
+			Level:      level,
+			Message:    message,
+			TraceID:    traceID,
+			SpanID:     spanID,
+			Attributes: attributes,
+			Error:      errorInfo,
 		}
 		if logJSON, err := json.Marshal(logEntry); err == nil {
 			fmt.Println(string(logJSON))

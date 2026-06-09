@@ -98,9 +98,9 @@ func (s *userService) CreateUser(ctx context.Context, dto userdtos.UserCreateDTO
 	}
 
 	// Save to database
-	
+
 	tx, err := s.dbtx.InitTx(ctx, nil)
-	
+
 	id, err := s.userRepo.Create(ctx, tx, user)
 	if err != nil {
 		logs.SpanError(ctx, span, err, "Failed to create user in database",
@@ -257,9 +257,9 @@ func (s *userService) CreateUserWithRole(ctx context.Context, id int64, dto user
 	// update user and role
 
 	// init tx
-	tx, err := s.dbtx.InitTx(ctx,&sql.TxOptions{
+	tx, err := s.dbtx.InitTx(ctx, &sql.TxOptions{
 		Isolation: sql.IsolationLevel(sql.LevelLinearizable),
-		ReadOnly: false,
+		ReadOnly:  false,
 	})
 
 	if err != nil {

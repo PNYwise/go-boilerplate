@@ -49,20 +49,20 @@ type Config struct {
 	DbWriteTimeout int // seconds
 
 	// OpenTelemetry Configuration
-	OtelEnabled        bool
-	OtelServiceVersion string
-	OtelEnvironment    string
+	OtelEnabled         bool
+	OtelServiceVersion  string
+	OtelEnvironment     string
 	OtelServiceNodeName string
-	OtelOtlpEndpoint   string
-	OtelOtlpHeaders    map[string]string
-	OtelProtocol       string
+	OtelOtlpEndpoint    string
+	OtelOtlpHeaders     map[string]string
+	OtelProtocol        string
 
 	LogLevel string
 
-	AppName  string
-	HTTPAddr string
+	AppName            string
+	HTTPAddr           string
 	CorsAllowedOrigins []string
-	GrpcAddr string
+	GrpcAddr           string
 }
 
 func MustLoad(stage string) Config {
@@ -91,20 +91,20 @@ func MustLoad(stage string) Config {
 		DbWriteTimeout: getenvInt("DB_WRITE_TIMEOUT", 5),
 
 		// OpenTelemetry Configuration
-		OtelEnabled:        getenvBool("OTEL_ENABLED", false),
-		OtelServiceVersion: getenv("OTEL_SERVICE_VERSION", "1.0.0"),
-		OtelEnvironment:    getenv("OTEL_ENVIRONMENT", "development"),
+		OtelEnabled:         getenvBool("OTEL_ENABLED", false),
+		OtelServiceVersion:  getenv("OTEL_SERVICE_VERSION", "1.0.0"),
+		OtelEnvironment:     getenv("OTEL_ENVIRONMENT", "development"),
 		OtelServiceNodeName: getenv("OTEL_SERVICE_NODE_NAME", hostnameOrEmpty()),
-		OtelOtlpEndpoint:   getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
-		OtelOtlpHeaders:    parseHeaders(getenv("OTEL_EXPORTER_OTLP_HEADERS", "")),
-		OtelProtocol:       getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http"),
+		OtelOtlpEndpoint:    getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
+		OtelOtlpHeaders:     parseHeaders(getenv("OTEL_EXPORTER_OTLP_HEADERS", "")),
+		OtelProtocol:        getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http"),
 
-		LogLevel:           getenv("LOG_LEVEL", ""),
+		LogLevel: getenv("LOG_LEVEL", ""),
 
 		CorsAllowedOrigins: splitCSVDefault(getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"), []string{"http://localhost:3000"}),
-		AppName:  getenv("APP_NAME", "example"),
-		HTTPAddr: getenv("HTTP_ADDR", ":8080"),
-		GrpcAddr: getenv("GRPC_ADDR", ":9090"),
+		AppName:            getenv("APP_NAME", "example"),
+		HTTPAddr:           getenv("HTTP_ADDR", ":8080"),
+		GrpcAddr:           getenv("GRPC_ADDR", ":9090"),
 	}
 
 	// Seamless validation - just ensure HTTP basics are set
@@ -206,7 +206,7 @@ func parseHeaders(headerStr string) map[string]string {
 	if headerStr == "" {
 		return headers
 	}
-	
+
 	pairs := strings.Split(headerStr, ",")
 	for _, pair := range pairs {
 		if kv := strings.Split(strings.TrimSpace(pair), "="); len(kv) == 2 {
