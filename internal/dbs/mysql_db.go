@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"embed"
 	"errors"
 	"fmt"
 	"go-boilerplate/internal/configs"
@@ -13,8 +14,14 @@ import (
 
 	"github.com/XSAM/otelsql"
 	_ "github.com/go-sql-driver/mysql" // MySQL driver
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/mysql"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"go.opentelemetry.io/otel/attribute"
 )
+
+//go:embed migrations/*.sql
+var migrationFS embed.FS
 
 // NewMySQLDB initializes a new MySQL database connection with OpenTelemetry instrumentation.
 // It uses otelsql.Open to automatically trace all database operations including queries,
@@ -22,7 +29,7 @@ import (
 // performance and integrates seamlessly with the ELK stack via OpenTelemetry traces.
 func NewMySQLDB(cfg configs.Config) (*sql.DB, func(), error) {
 	// Build DSN with timeouts & parseTime
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&timeout=%ds&readTimeout=%ds&writeTimeout=%ds",
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&timeout=%ds&readTimeout=%ds&writeTimeout=%ds&multiStatements=true",
 		cfg.DbUser, cfg.DbPassword, cfg.DbHost, cfg.DbPort, cfg.DbName,
 		cfg.DbTimeout, cfg.DbReadTimeout, cfg.DbWriteTimeout,
 	)
@@ -76,6 +83,28 @@ func NewMySQLDB(cfg configs.Config) (*sql.DB, func(), error) {
 		db.Close()
 		return nil, nil, fmt.Errorf("database ping failed: %w", err)
 	}
+
+	// Run migrations
+	migrationDriver, err := mysql.WithInstance(db, &mysql.Config{})
+	if err != nil {
+		db.Close()
+		return nil, nil, fmt.Errorf("could not start sql migration driver: %w", err)
+	}
+	sourceDriver, err := iofs.New(migrationFS, "migrations")
+	if err != nil {
+		db.Close()
+		return nil, nil, fmt.Errorf("could not create iofs source driver: %w", err)
+	}
+	m, err := migrate.NewWithInstance("iofs", sourceDriver, "mysql", migrationDriver)
+	if err != nil {
+		db.Close()
+		return nil, nil, fmt.Errorf("could not create migrate instance: %w", err)
+	}
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		db.Close()
+		return nil, nil, fmt.Errorf("could not run sql migration: %w", err)
+	}
+	log.Printf("Database migrations completed successfully")
 
 	// Register database connection pool metrics for monitoring
 	// This tracks connection pool stats (idle, in-use, wait count) in OpenTelemetry metrics

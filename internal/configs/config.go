@@ -43,6 +43,12 @@ type Config struct {
 	DbMaxIdleConns    int
 	DbConnMaxLifetime int
 
+	// Redis
+	RedisHost     string
+	RedisPort     int
+	RedisPassword string
+	RedisDB       int
+
 	// DB Connection Timeouts
 	DbTimeout      int // seconds
 	DbReadTimeout  int // seconds
@@ -84,6 +90,12 @@ func MustLoad(stage string) Config {
 		DbMaxOpenConns:    getenvInt("DB_MAX_OPEN_CONNS", 0),
 		DbMaxIdleConns:    getenvInt("DB_MAX_IDLE_CONNS", 0),
 		DbConnMaxLifetime: getenvInt("DB_CONN_MAX_LIFETIME_MIN", 0),
+
+		// Redis
+		RedisHost:     getenv("REDIS_HOST", "localhost"),
+		RedisPort:     getenvInt("REDIS_PORT", 6379),
+		RedisPassword: getenv("REDIS_PASSWORD", ""),
+		RedisDB:       getenvInt("REDIS_DB", 0),
 
 		// DB Connection Timeouts (default 5 seconds each)
 		DbTimeout:      getenvInt("DB_TIMEOUT", 5),
