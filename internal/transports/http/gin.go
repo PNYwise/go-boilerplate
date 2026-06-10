@@ -11,6 +11,8 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+
+	"go-boilerplate/internal/transports/http/middlewares"
 )
 
 // Server holds the Gin engine and services for the HTTP server.
@@ -54,6 +56,7 @@ func NewHTTPServer(
 
 	// Standard middleware
 	r.Use(gin.Recovery())
+	r.Use(middlewares.RequestLogger())
 
 	// Health route stays here
 	r.GET("/healthz", func(c *gin.Context) {

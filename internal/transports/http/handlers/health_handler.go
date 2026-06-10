@@ -3,6 +3,7 @@ package handlers
 import (
 	"go-boilerplate/internal/services"
 	"go-boilerplate/internal/utils/logs"
+	"go-boilerplate/internal/utils/response"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -31,14 +32,14 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 
 	if err := h.healthSrv.Check(ctx); err != nil {
 		logs.SpanError(ctx, span, err, "Health check failed")
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		response.JSON(c, http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	status := h.healthSrv.GetStatus(ctx)
 	logs.SpanInfo(ctx, span, "Health check completed successfully")
 
-	c.JSON(http.StatusOK, status)
+	response.JSON(c, http.StatusOK, status)
 }
 
 // TestCrash handles GET /test-crash requests - for testing panic recovery

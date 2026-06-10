@@ -43,22 +43,32 @@ type Config struct {
 	DbMaxIdleConns    int
 	DbConnMaxLifetime int
 
+	// Redis
+	RedisHost     string
+	RedisPort     int
+	RedisPassword string
+	RedisDB       int
+
 	// DB Connection Timeouts
 	DbTimeout      int // seconds
 	DbReadTimeout  int // seconds
 	DbWriteTimeout int // seconds
 
 	// OpenTelemetry Configuration
-	OtelServiceVersion string
-	OtelEnvironment    string
+	OtelEnabled         bool
+	OtelServiceVersion  string
+	OtelEnvironment     string
 	OtelServiceNodeName string
-	OtelOtlpEndpoint   string
-	OtelOtlpHeaders    map[string]string
+	OtelOtlpEndpoint    string
+	OtelOtlpHeaders     map[string]string
+	OtelProtocol        string
 
-	AppName  string
-	HTTPAddr string
+	LogLevel string
+
+	AppName            string
+	HTTPAddr           string
 	CorsAllowedOrigins []string
-	GrpcAddr string
+	GrpcAddr           string
 }
 
 func MustLoad(stage string) Config {
@@ -81,22 +91,32 @@ func MustLoad(stage string) Config {
 		DbMaxIdleConns:    getenvInt("DB_MAX_IDLE_CONNS", 0),
 		DbConnMaxLifetime: getenvInt("DB_CONN_MAX_LIFETIME_MIN", 0),
 
+		// Redis
+		RedisHost:     getenv("REDIS_HOST", "localhost"),
+		RedisPort:     getenvInt("REDIS_PORT", 6379),
+		RedisPassword: getenv("REDIS_PASSWORD", ""),
+		RedisDB:       getenvInt("REDIS_DB", 0),
+
 		// DB Connection Timeouts (default 5 seconds each)
 		DbTimeout:      getenvInt("DB_TIMEOUT", 5),
 		DbReadTimeout:  getenvInt("DB_READ_TIMEOUT", 5),
 		DbWriteTimeout: getenvInt("DB_WRITE_TIMEOUT", 5),
 
 		// OpenTelemetry Configuration
-		OtelServiceVersion: getenv("OTEL_SERVICE_VERSION", "1.0.0"),
-		OtelEnvironment:    getenv("OTEL_ENVIRONMENT", "development"),
+		OtelEnabled:         getenvBool("OTEL_ENABLED", false),
+		OtelServiceVersion:  getenv("OTEL_SERVICE_VERSION", "1.0.0"),
+		OtelEnvironment:     getenv("OTEL_ENVIRONMENT", "development"),
 		OtelServiceNodeName: getenv("OTEL_SERVICE_NODE_NAME", hostnameOrEmpty()),
-		OtelOtlpEndpoint:   getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
-		OtelOtlpHeaders:    parseHeaders(getenv("OTEL_EXPORTER_OTLP_HEADERS", "")),
+		OtelOtlpEndpoint:    getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
+		OtelOtlpHeaders:     parseHeaders(getenv("OTEL_EXPORTER_OTLP_HEADERS", "")),
+		OtelProtocol:        getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http"),
+
+		LogLevel: getenv("LOG_LEVEL", ""),
 
 		CorsAllowedOrigins: splitCSVDefault(getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"), []string{"http://localhost:3000"}),
-		AppName:  getenv("APP_NAME", "example"),
-		HTTPAddr: getenv("HTTP_ADDR", ":8080"),
-		GrpcAddr: getenv("GRPC_ADDR", ":9090"),
+		AppName:            getenv("APP_NAME", "example"),
+		HTTPAddr:           getenv("HTTP_ADDR", ":8080"),
+		GrpcAddr:           getenv("GRPC_ADDR", ":9090"),
 	}
 
 	// Seamless validation - just ensure HTTP basics are set
@@ -198,7 +218,7 @@ func parseHeaders(headerStr string) map[string]string {
 	if headerStr == "" {
 		return headers
 	}
-	
+
 	pairs := strings.Split(headerStr, ",")
 	for _, pair := range pairs {
 		if kv := strings.Split(strings.TrimSpace(pair), "="); len(kv) == 2 {
