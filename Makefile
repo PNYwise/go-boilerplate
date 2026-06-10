@@ -32,7 +32,6 @@ help: ## ✨ Show this help message
 
 build: ## 📦 Build the application binary
 	@$(MAKE) clean
-	@$(MAKE) wire
 	@echo "Building binary..."
 	@$(GO) build $(LDFLAGS) -o ./cmd/$(BINARY_NAME) $(CMD_PATH)
 	@echo "Binary created at cmd/$(BINARY_NAME)"
@@ -49,10 +48,6 @@ coverage: ## 🧪 coverage report
 	@echo "Running tests..."
 	@$(GO) tool cover -html=coverage.out
 
-wire: ## ⚡ Generate wire dependency injection code
-	@echo "Generating wire dependency injection code..."
-	@cd internal/apps && wire
-	@echo "Wire code generation completed"
 
 local: ## 🚀 Run the application in local mode (with hot-reload)
 	@echo "Starting dev server with hot-reload using 'go run'..."

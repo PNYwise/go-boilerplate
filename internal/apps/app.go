@@ -16,7 +16,7 @@ type App struct {
 }
 
 // New creates a new App instance - DO NOT MODIFY
-// Use wire.go to customize application dependencies
+// Use fx.go to customize application dependencies
 func New(cfg configs.Config) (*App, error) {
 	// Initialize OpenTelemetry first
 	otelCleanup, err := logs.InitializeOpenTelemetry(cfg)

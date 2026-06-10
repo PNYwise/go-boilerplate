@@ -15,7 +15,7 @@ import (
 )
 
 // main bootstraps the application - DO NOT MODIFY
-// All customization should happen in internal/apps/wire.go
+// All customization should happen in internal/apps/fx.go
 func main() {
 	defer handlePanic()
 
