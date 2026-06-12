@@ -25,6 +25,7 @@ import (
 
 	"go-boilerplate/internal/configs"
 	"go-boilerplate/internal/dbs"
+	"go-boilerplate/internal/messaging"
 	"go-boilerplate/internal/repositories"
 	"go-boilerplate/internal/services"
 
@@ -99,8 +100,10 @@ var InfrastructureModule = fx.Module("infrastructure",
 		// Database: cleanup registered via fx.Lifecycle in newManagedMySQLDB
 		newManagedMySQLDB,
 		newManagedRedisClient,
+		dbs.NewRabbitMQConnection,
 		dbs.NewRedsync,
 		dbtransaction.NewDbTransactionUtil,
+		messaging.NewProducer,
 		// Input validation (singleton via sync.Once internally)
 		validation.GetValidator,
 
@@ -109,6 +112,10 @@ var InfrastructureModule = fx.Module("infrastructure",
 		// queue.NewRabbitMQClient,
 		// cache.NewCacheProvider,
 	),
+	fx.Invoke(func(r *redis.Client, q *dbs.RabbitMQConnection) {
+		// Eagerly initialize Redis and RabbitMQ connections on startup
+		// to ensure the app fails fast if infrastructure is unreachable.
+	}),
 )
 
 // ===================================================================
@@ -133,6 +140,7 @@ var ServiceModule = fx.Module("services",
 	fx.Provide(
 		services.NewHealthService,
 		services.NewUserService,
+		services.NewAuditService,
 
 		// Add new services here:
 		// services.NewProductService,
@@ -149,6 +157,7 @@ var HandlerModule = fx.Module("handlers",
 	fx.Provide(
 		httphandlers.NewHealthHandler,
 		httphandlers.NewUserHandler,
+		httphandlers.NewAuditHandler,
 
 		// Add new handlers here:
 		// httphandlers.NewProductHandler,

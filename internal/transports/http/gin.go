@@ -29,6 +29,7 @@ type Server struct {
 func NewHTTPServer(
 	healthHandler *handlers.HealthHandler,
 	userHandler *handlers.UserHandler,
+	auditHandler *handlers.AuditHandler,
 	cfg configs.Config,
 ) *Server {
 	r := gin.New()
@@ -66,6 +67,7 @@ func NewHTTPServer(
 	// Load application routes
 	routers.RegisterUserRoutes(r, userHandler, cfg)
 	routers.RegisterHealthRoutes(r, healthHandler, cfg)
+	routers.RegisterAuditRoutes(r, auditHandler, cfg)
 
 	return &Server{eng: r}
 }

@@ -81,6 +81,17 @@ func MustLoad(stage string) Config {
 
 	// Build config from environment (with defaults)
 	cfg := Config{
+		// Rabbit
+		RabbitURL:             getenv("RABBIT_URL", ""),
+		RabbitExchange:        getenv("RABBIT_EXCHANGE", ""),
+		RabbitQueue:           getenv("RABBIT_QUEUE", ""),
+		RabbitRoutingKeys:     splitCSVDefault(getenv("RABBIT_ROUTING_KEYS", ""), nil),
+		RabbitPrefetch:        getenvInt("RABBIT_PREFETCH", 100),
+		RabbitRetryTTLMS:      getenvInt("RABBIT_RETRY_TTL_MS", 60000),
+		RabbitMaxRedeliveries: getenvInt("RABBIT_MAX_REDELIVERIES", 5),
+		RabbitDLX:             getenv("RABBIT_DLX", ""),
+		RabbitRetryExchange:   getenv("RABBIT_RETRY_EXCHANGE", ""),
+
 		// DB (optional)
 		DbUser:            getenv("DB_USER", ""),
 		DbPassword:        getenv("DB_PASSWORD", ""),

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"go-boilerplate/internal/configs"
 	userdtos "go-boilerplate/internal/dtos/user_dtos"
@@ -10,8 +11,10 @@ import (
 	"go-boilerplate/internal/repositories"
 	dbtransaction "go-boilerplate/internal/utils/db-transaction"
 	"go-boilerplate/internal/utils/logs"
+	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -29,12 +32,13 @@ type UserService interface {
 }
 
 type userService struct {
-	userRepo repositories.UserRepository
-	roleRepo repositories.RoleRepository
-	dbtx     dbtransaction.DbTransactionUtil
-	cfg      configs.Config
-	tracer   trace.Tracer // OpenTelemetry tracer for this service
-	v        *validator.Validate
+	userRepo    repositories.UserRepository
+	roleRepo    repositories.RoleRepository
+	dbtx        dbtransaction.DbTransactionUtil
+	cfg         configs.Config
+	tracer      trace.Tracer // OpenTelemetry tracer for this service
+	v           *validator.Validate
+	redisClient *redis.Client
 }
 
 // NewUserService creates a new user service instance with OpenTelemetry instrumentation
@@ -44,14 +48,16 @@ func NewUserService(
 	dbtx dbtransaction.DbTransactionUtil,
 	cfg configs.Config,
 	v *validator.Validate,
+	redisClient *redis.Client,
 ) UserService {
 	return &userService{
-		userRepo: userRepo,
-		roleRepo: roleRepo,
-		dbtx:     dbtx,
-		cfg:      cfg,
-		tracer:   otel.Tracer("user-service"),
-		v:        v,
+		userRepo:    userRepo,
+		roleRepo:    roleRepo,
+		dbtx:        dbtx,
+		cfg:         cfg,
+		tracer:      otel.Tracer("user-service"),
+		v:           v,
+		redisClient: redisClient,
 	}
 }
 
@@ -146,6 +152,19 @@ func (s *userService) GetUserList(ctx context.Context, page, pageSize int) (*use
 		attribute.Int("page_size", pageSize),
 	)
 
+	cacheKey := fmt.Sprintf("users:list:page:%d:size:%d", page, pageSize)
+	cachedResult, err := s.redisClient.Get(ctx, cacheKey).Result()
+	if err == nil {
+		// Cache hit
+		var result userdtos.UserListResponseDTO
+		if err := json.Unmarshal([]byte(cachedResult), &result); err == nil {
+			logs.SpanInfo(ctx, span, "User list retrieved from cache",
+				attribute.Int("count", len(result.Users)),
+			)
+			return &result, nil
+		}
+	}
+
 	users, totalItems, err := s.userRepo.GetList(ctx, page, pageSize)
 	if err != nil {
 		logs.SpanError(ctx, span, err, "Failed to retrieve user from database")
@@ -168,11 +187,7 @@ func (s *userService) GetUserList(ctx context.Context, page, pageSize int) (*use
 		totalPages = int((totalItems + int64(pageSize) - 1) / int64(pageSize))
 	}
 
-	logs.SpanInfo(ctx, span, "User list retrieved successfully",
-		attribute.Int("count", len(userResponses)),
-	)
-
-	return &userdtos.UserListResponseDTO{
+	result := &userdtos.UserListResponseDTO{
 		Users: userResponses,
 		Pagination: userdtos.PaginationMeta{
 			Page:       page,
@@ -180,7 +195,18 @@ func (s *userService) GetUserList(ctx context.Context, page, pageSize int) (*use
 			TotalItems: totalItems,
 			TotalPages: totalPages,
 		},
-	}, nil
+	}
+
+	if jsonBytes, err := json.Marshal(result); err == nil {
+		// Cache for 5 minutes
+		_ = s.redisClient.Set(ctx, cacheKey, string(jsonBytes), 5*time.Minute).Err()
+	}
+
+	logs.SpanInfo(ctx, span, "User list retrieved successfully",
+		attribute.Int("count", len(userResponses)),
+	)
+
+	return result, nil
 }
 
 func (s *userService) GetUserByID(ctx context.Context, id int64) (*userdtos.UserResponseDTO, error) {

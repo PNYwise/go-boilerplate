@@ -28,10 +28,12 @@ var migrationFS embed.FS
 // transactions, and connection pool metrics. This provides observability into database
 // performance and integrates seamlessly with the ELK stack via OpenTelemetry traces.
 func NewMySQLDB(cfg configs.Config) (*sql.DB, func(), error) {
+	connName := generateConnName(cfg.AppName, "mysql")
+
 	// Build DSN with timeouts & parseTime
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&timeout=%ds&readTimeout=%ds&writeTimeout=%ds&multiStatements=true",
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&timeout=%ds&readTimeout=%ds&writeTimeout=%ds&multiStatements=true&connectionAttributes=program_name:%s",
 		cfg.DbUser, cfg.DbPassword, cfg.DbHost, cfg.DbPort, cfg.DbName,
-		cfg.DbTimeout, cfg.DbReadTimeout, cfg.DbWriteTimeout,
+		cfg.DbTimeout, cfg.DbReadTimeout, cfg.DbWriteTimeout, connName,
 	)
 
 	// Use otelsql.Open instead of sql.Open for automatic database instrumentation
@@ -128,8 +130,8 @@ func NewMySQLDB(cfg configs.Config) (*sql.DB, func(), error) {
 		_ = db.Close()
 	}
 
-	log.Printf("MySQL database initialized with OpenTelemetry instrumentation: %s@%s:%d/%s",
-		cfg.DbUser, cfg.DbHost, cfg.DbPort, cfg.DbName)
+	log.Printf("MySQL database initialized with OpenTelemetry instrumentation: %s@%s:%d/%s (Name: %s)",
+		cfg.DbUser, cfg.DbHost, cfg.DbPort, cfg.DbName, connName)
 
 	return db, cleanup, nil
 }
