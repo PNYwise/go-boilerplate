@@ -22,10 +22,12 @@ type Config struct {
 
 	// Rabbit
 	RabbitURL         string
-	RabbitExchange    string
-	RabbitQueue       string
-	RabbitRoutingKeys []string
-	RabbitPrefetch    int
+	RabbitExchange             string
+	RabbitAuditQueue           string
+	RabbitNotificationQueue    string
+	RabbitRoutingKeys          []string
+	RabbitAuditPrefetch        int
+	RabbitNotificationPrefetch int
 
 	RabbitRetryTTLMS      int
 	RabbitMaxRedeliveries int
@@ -83,10 +85,12 @@ func MustLoad(stage string) Config {
 	cfg := Config{
 		// Rabbit
 		RabbitURL:             getenv("RABBIT_URL", ""),
-		RabbitExchange:        getenv("RABBIT_EXCHANGE", ""),
-		RabbitQueue:           getenv("RABBIT_QUEUE", ""),
-		RabbitRoutingKeys:     splitCSVDefault(getenv("RABBIT_ROUTING_KEYS", ""), nil),
-		RabbitPrefetch:        getenvInt("RABBIT_PREFETCH", 100),
+		RabbitExchange:             getenv("RABBIT_EXCHANGE", ""),
+		RabbitAuditQueue:           getenv("RABBIT_AUDIT_QUEUE", "audit_logs_queue"),
+		RabbitNotificationQueue:    getenv("RABBIT_NOTIFICATION_QUEUE", "notification_queue"),
+		RabbitRoutingKeys:          splitCSVDefault(getenv("RABBIT_ROUTING_KEYS", ""), nil),
+		RabbitAuditPrefetch:        getenvInt("RABBIT_AUDIT_PREFETCH", 100),
+		RabbitNotificationPrefetch: getenvInt("RABBIT_NOTIFICATION_PREFETCH", 50),
 		RabbitRetryTTLMS:      getenvInt("RABBIT_RETRY_TTL_MS", 60000),
 		RabbitMaxRedeliveries: getenvInt("RABBIT_MAX_REDELIVERIES", 5),
 		RabbitDLX:             getenv("RABBIT_DLX", ""),

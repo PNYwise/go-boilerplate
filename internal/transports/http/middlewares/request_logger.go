@@ -152,6 +152,6 @@ func RequestLogger() gin.HandlerFunc {
 		}
 
 		// Log using existing utility
-		logs.LogInfo(ctx, fmt.Sprintf("HTTP Request Completed: %d %s", c.Writer.Status(), c.Request.URL.Path), endAttrs...)
+		logs.LogInfo(ctx, fmt.Sprintf("HTTP Request Completed: %d %s %s", c.Writer.Status(), c.Request.Method, c.Request.URL.Path), endAttrs...)
 	}
 }

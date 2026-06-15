@@ -129,6 +129,11 @@ func (r *RabbitMQConnection) Channel() (*amqp.Channel, error) {
 	return r.conn.Channel()
 }
 
+// AppName returns the configured application name for this connection
+func (r *RabbitMQConnection) AppName() string {
+	return r.cfg.AppName
+}
+
 // IsConnected returns the current connection state
 func (r *RabbitMQConnection) IsConnected() bool {
 	return r.connected.Load()

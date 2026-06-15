@@ -144,6 +144,7 @@ var ServiceModule = fx.Module("services",
 		services.NewHealthService,
 		services.NewUserService,
 		services.NewAuditService,
+		services.NewNotificationService,
 
 		// Add new services here:
 		// services.NewProductService,
@@ -162,6 +163,7 @@ var HandlerModule = fx.Module("handlers",
 		httphandlers.NewUserHandler,
 		httphandlers.NewAuditHandler,
 		rabbitmqhandlers.NewAuditWorker,
+		rabbitmqhandlers.NewNotificationWorker,
 
 		// Add new handlers here:
 		// httphandlers.NewProductHandler,

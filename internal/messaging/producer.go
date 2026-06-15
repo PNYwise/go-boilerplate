@@ -5,14 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"go-boilerplate/internal/dbs"
+	messagingdtos "go-boilerplate/internal/dtos/messaging_dtos"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/rs/xid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
 
 type Producer interface {
 	PublishJSON(ctx context.Context, exchange, routingKey string, payload interface{}) error
+	PublishMessage(ctx context.Context, exchange, routingKey, messageType string, payload interface{}) error
 }
 
 type producer struct {
@@ -64,6 +68,28 @@ func (p *producer) PublishJSON(ctx context.Context, exchange, routingKey string,
 	}
 
 	return nil
+}
+
+func (p *producer) PublishMessage(ctx context.Context, exchange, routingKey, messageType string, payload interface{}) error {
+	ctx, span := p.tracer.Start(ctx, "RabbitMQ.PublishMessage")
+	defer span.End()
+
+	rawPayload, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal inner payload: %w", err)
+	}
+
+	msgID := xid.New().String()
+
+	envelope := messagingdtos.MessageEnvelope{
+		MessageID:   msgID,
+		MessageType: messageType,
+		Timestamp:   time.Now().UTC(),
+		TraceID:     span.SpanContext().TraceID().String(),
+		Payload:     rawPayload,
+	}
+
+	return p.PublishJSON(ctx, exchange, routingKey, envelope)
 }
 
 // headersCarrier adapts amqp.Table to satisfy the propagation.TextMapCarrier interface

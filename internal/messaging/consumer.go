@@ -7,7 +7,9 @@ import (
 	"go-boilerplate/internal/utils/logs"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/rs/xid"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -19,7 +21,7 @@ type Consumer interface {
 	DeclareExchange(exchange string, kind string) error
 	DeclareQueue(queue string) (amqp.Queue, error)
 	BindQueue(queue string, routingKey string, exchange string) error
-	Consume(ctx context.Context, queue string, handler MessageHandler) error
+	Consume(ctx context.Context, queue string, prefetch int, handler MessageHandler) error
 	Close() error
 }
 
@@ -95,25 +97,41 @@ func (c *consumer) BindQueue(queue string, routingKey string, exchange string) e
 	)
 }
 
-func (c *consumer) Consume(ctx context.Context, queue string, handler MessageHandler) error {
+func (c *consumer) Consume(ctx context.Context, queue string, prefetch int, handler MessageHandler) error {
 	ch, err := c.getChannel()
 	if err != nil {
 		return fmt.Errorf("failed to get consumer channel: %w", err)
 	}
 
+	// Apply prefetch configuration to this specific channel
+	if prefetch > 0 {
+		if err := ch.Qos(prefetch, 0, false); err != nil {
+			ch.Close()
+			return fmt.Errorf("failed to set Qos prefetch: %w", err)
+		}
+	}
+
+	consumerTag := fmt.Sprintf("%s_consumer_%s", c.conn.AppName(), xid.New().String())
+
 	msgs, err := ch.Consume(
-		queue, // queue
-		"",    // consumer name (auto-generate)
-		false, // auto-ack (we do manual ack)
-		false, // exclusive
-		false, // no-local
-		false, // no-wait
-		nil,   // args
+		queue,       // queue
+		consumerTag, // consumer name
+		false,       // auto-ack (we do manual ack)
+		false,       // exclusive
+		false,       // no-local
+		false,       // no-wait
+		nil,         // args
 	)
 	if err != nil {
 		ch.Close()
 		return fmt.Errorf("failed to register a consumer: %w", err)
 	}
+
+	logs.LogInfo(ctx, "RabbitMQ consumer started",
+		attribute.String("queue", queue),
+		attribute.String("consumer_tag", consumerTag),
+		attribute.Int("prefetch", prefetch),
+	)
 
 	// Run the listening loop in a goroutine
 	go func() {

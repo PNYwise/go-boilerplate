@@ -2,6 +2,7 @@ package rabbitmq
 
 import (
 	"context"
+	"go-boilerplate/internal/configs"
 	"go-boilerplate/internal/messaging"
 	"go-boilerplate/internal/transports/rabbitmq/handlers"
 	"go-boilerplate/internal/transports/rabbitmq/routers"
@@ -12,18 +13,24 @@ import (
 
 // Server coordinates the initialization and routing for the RabbitMQ consumer
 type Server struct {
-	consumer    messaging.Consumer
-	auditWorker *handlers.AuditWorker
+	config             configs.Config
+	consumer           messaging.Consumer
+	auditWorker        *handlers.AuditWorker
+	notificationWorker *handlers.NotificationWorker
 }
 
 func NewRabbitMQServer(
 	lc fx.Lifecycle,
+	config configs.Config,
 	consumer messaging.Consumer,
 	auditWorker *handlers.AuditWorker,
+	notificationWorker *handlers.NotificationWorker,
 ) *Server {
 	srv := &Server{
-		consumer:    consumer,
-		auditWorker: auditWorker,
+		config:             config,
+		consumer:           consumer,
+		auditWorker:        auditWorker,
+		notificationWorker: notificationWorker,
 	}
 
 	lc.Append(fx.Hook{
@@ -41,9 +48,15 @@ func NewRabbitMQServer(
 // Start begins consuming messages
 func (s *Server) Start(ctx context.Context) error {
 	// Register all rabbitmq consumer routes
-	err := routers.RegisterAuditRoutes(ctx, s.consumer, s.auditWorker)
+	err := routers.RegisterAuditRoutes(ctx, s.config.RabbitAuditQueue, s.config.RabbitAuditPrefetch, s.consumer, s.auditWorker)
 	if err != nil {
-		logs.LogError(ctx, err, "Failed to register rabbitmq routes")
+		logs.LogError(ctx, err, "Failed to register rabbitmq audit routes")
+		return err
+	}
+
+	err = routers.RegisterNotificationRoutes(ctx, s.config.RabbitNotificationQueue, s.config.RabbitNotificationPrefetch, s.consumer, s.notificationWorker)
+	if err != nil {
+		logs.LogError(ctx, err, "Failed to register rabbitmq notification routes")
 		return err
 	}
 	

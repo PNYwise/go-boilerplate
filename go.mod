@@ -13,6 +13,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/rabbitmq/amqp091-go v1.11.0
 	github.com/redis/go-redis/v9 v9.20.0
+	github.com/rs/xid v1.6.0
 	go.opentelemetry.io/contrib/bridges/otelzap v0.18.0
 	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.67.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.68.0

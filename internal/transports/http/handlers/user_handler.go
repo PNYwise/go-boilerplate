@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"go-boilerplate/internal/configs"
+	auditdtos "go-boilerplate/internal/dtos/audit_dtos"
 	userdtos "go-boilerplate/internal/dtos/user_dtos"
+	"go-boilerplate/internal/messaging"
 	"go-boilerplate/internal/services"
 	"go-boilerplate/internal/utils/logs"
 	"net/http"
@@ -15,15 +18,19 @@ import (
 
 // UserHandler handles HTTP requests related to users
 type UserHandler struct {
-	userSrv services.UserService
-	tracer  trace.Tracer
+	config   configs.Config
+	userSrv  services.UserService
+	producer messaging.Producer
+	tracer   trace.Tracer
 }
 
 // NewUserHandler creates a new UserHandler
-func NewUserHandler(userSrv services.UserService) *UserHandler {
+func NewUserHandler(config configs.Config, userSrv services.UserService, producer messaging.Producer) *UserHandler {
 	return &UserHandler{
-		userSrv: userSrv,
-		tracer:  otel.Tracer("user-handler"),
+		config:   config,
+		userSrv:  userSrv,
+		producer: producer,
+		tracer:   otel.Tracer("user-handler"),
 	}
 }
 
@@ -58,8 +65,23 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	span.SetAttributes(attribute.Int64("user.id", user.ID))
 	logs.SpanInfo(ctx, span, "User created successfully",
 		attribute.Int64("user_id", user.ID),
-		attribute.String("username", user.Username),
 	)
+
+	// Publish Audit Log Event
+	auditPayload := auditdtos.CreateAuditLogDTO{
+		Action:   "USER_CREATED",
+		Entity:   "USER",
+		EntityID: strconv.FormatInt(user.ID, 10),
+		ActorID:  user.ID, // Self-registration
+	}
+	_ = h.producer.PublishMessage(ctx, "", h.config.RabbitAuditQueue, "AUDIT_LOG", auditPayload)
+
+	// Publish Welcome Email Notification Command
+	emailPayload := map[string]string{
+		"email": user.Email,
+		"name":  user.Username,
+	}
+	_ = h.producer.PublishMessage(ctx, "", h.config.RabbitNotificationQueue, "USER_WELCOME_EMAIL", emailPayload)
 
 	c.JSON(http.StatusCreated, user)
 }
