@@ -16,6 +16,7 @@ import (
 
 type AuditService interface {
 	PublishAuditLog(ctx context.Context, dto auditdtos.CreateAuditLogDTO) error
+	ProcessIncomingAuditLog(ctx context.Context, msg auditdtos.AuditLogMessage) error
 }
 
 type auditService struct {
@@ -67,5 +68,18 @@ func (s *auditService) PublishAuditLog(ctx context.Context, dto auditdtos.Create
 	}
 
 	logs.SpanInfo(ctx, span, "Audit log published successfully")
+	return nil
+}
+
+func (s *auditService) ProcessIncomingAuditLog(ctx context.Context, msg auditdtos.AuditLogMessage) error {
+	ctx, span := s.tracer.Start(ctx, "AuditService.ProcessIncomingAuditLog")
+	defer span.End()
+
+	// Simulate processing the message (e.g. saving to DB)
+	logs.SpanInfo(ctx, span, fmt.Sprintf("Processing Audit Log -> Action: %s, Entity: %s, ID: %s, TraceID: %s", 
+		msg.Action, msg.Entity, msg.EntityID, msg.TraceID))
+
+	// If we were saving to DB, we'd do it here.
+
 	return nil
 }

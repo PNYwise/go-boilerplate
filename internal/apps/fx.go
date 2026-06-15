@@ -31,6 +31,8 @@ import (
 
 	httptransport "go-boilerplate/internal/transports/http"
 	httphandlers "go-boilerplate/internal/transports/http/handlers"
+	"go-boilerplate/internal/transports/rabbitmq"
+	rabbitmqhandlers "go-boilerplate/internal/transports/rabbitmq/handlers"
 	dbtransaction "go-boilerplate/internal/utils/db-transaction"
 	"go-boilerplate/internal/utils/validation"
 
@@ -104,6 +106,7 @@ var InfrastructureModule = fx.Module("infrastructure",
 		dbs.NewRedsync,
 		dbtransaction.NewDbTransactionUtil,
 		messaging.NewProducer,
+		messaging.NewConsumer,
 		// Input validation (singleton via sync.Once internally)
 		validation.GetValidator,
 
@@ -158,6 +161,7 @@ var HandlerModule = fx.Module("handlers",
 		httphandlers.NewHealthHandler,
 		httphandlers.NewUserHandler,
 		httphandlers.NewAuditHandler,
+		rabbitmqhandlers.NewAuditWorker,
 
 		// Add new handlers here:
 		// httphandlers.NewProductHandler,
@@ -178,7 +182,11 @@ var HandlerModule = fx.Module("handlers",
 var TransportModule = fx.Module("transport",
 	fx.Provide(
 		httptransport.NewHTTPServer,
+		rabbitmq.NewRabbitMQServer,
 	),
+	fx.Invoke(func(*rabbitmq.Server) {
+		// Eagerly instantiate RabbitMQServer to ensure its lifecycle hooks (Start/Stop) run
+	}),
 )
 
 // Future gRPC example:
