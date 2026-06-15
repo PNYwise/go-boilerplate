@@ -39,6 +39,7 @@ const (
 	LogLevelInfo  LogLevel = "info"
 	LogLevelWarn  LogLevel = "warn"
 	LogLevelError LogLevel = "error"
+	LogLevelFatal LogLevel = "fatal"
 )
 
 // StructuredLog represents the structure for JSON logs
@@ -172,10 +173,10 @@ func GetLogger() *ZapLogger {
 func initializeZapLogger(cfg configs.Config, res *resource.Resource, logExporter sdklog.Exporter) error {
 	level := zapcore.WarnLevel
 	switch cfg.OtelEnvironment {
-		case "development", "dev":
-			level = zapcore.DebugLevel
-		case "staging":
-			level = zapcore.InfoLevel
+	case "development", "dev":
+		level = zapcore.DebugLevel
+	case "staging":
+		level = zapcore.InfoLevel
 	}
 
 	encoderConfig := zap.NewProductionEncoderConfig()
@@ -209,11 +210,31 @@ func initializeZapLogger(cfg configs.Config, res *resource.Resource, logExporter
 }
 
 // Convenience global logging functions
-func Info(msg string, fields ...zap.Field)  { if globalLogger != nil { globalLogger.Info(msg, fields...) } }
-func Debug(msg string, fields ...zap.Field) { if globalLogger != nil { globalLogger.Debug(msg, fields...) } }
-func Warn(msg string, fields ...zap.Field)  { if globalLogger != nil { globalLogger.Warn(msg, fields...) } }
-func Error(msg string, fields ...zap.Field) { if globalLogger != nil { globalLogger.Error(msg, fields...) } }
-func Fatal(msg string, fields ...zap.Field) { if globalLogger != nil { globalLogger.Fatal(msg, fields...) } }
+func Info(msg string, fields ...zap.Field) {
+	if globalLogger != nil {
+		globalLogger.Info(msg, fields...)
+	}
+}
+func Debug(msg string, fields ...zap.Field) {
+	if globalLogger != nil {
+		globalLogger.Debug(msg, fields...)
+	}
+}
+func Warn(msg string, fields ...zap.Field) {
+	if globalLogger != nil {
+		globalLogger.Warn(msg, fields...)
+	}
+}
+func Error(msg string, fields ...zap.Field) {
+	if globalLogger != nil {
+		globalLogger.Error(msg, fields...)
+	}
+}
+func Fatal(msg string, fields ...zap.Field) {
+	if globalLogger != nil {
+		globalLogger.Fatal(msg, fields...)
+	}
+}
 
 // LogInfo creates a structured log entry and outputs it as JSON
 func LogInfo(ctx context.Context, message string, attrs ...attribute.KeyValue) {
@@ -230,6 +251,15 @@ func LogError(ctx context.Context, err error, message string, attrs ...attribute
 		errorInfo = &ErrorInfo{Message: err.Error(), Type: fmt.Sprintf("%T", err)}
 	}
 	logStructured(ctx, LogLevelError, message, errorInfo, attrs...)
+}
+
+func LogFatal(ctx context.Context, err error, message string, attrs ...attribute.KeyValue) {
+	var errorInfo *ErrorInfo
+	if err != nil {
+		errorInfo = &ErrorInfo{Message: err.Error(), Type: fmt.Sprintf("%T", err)}
+	}
+
+	logStructured(ctx, LogLevelFatal, message, errorInfo, attrs...)
 }
 
 func LogDebug(ctx context.Context, message string, attrs ...attribute.KeyValue) {
@@ -272,13 +302,13 @@ func logStructured(ctx context.Context, level LogLevel, message string, errorInf
 	} else {
 		// Absolute Fallback
 		logEntry := StructuredLog{
-			Timestamp:   time.Now().UTC(),
-			Level:       level,
-			Message:     message,
-			TraceID:     traceID,
-			SpanID:      spanID,
-			Attributes:  attributes,
-			Error:       errorInfo,
+			Timestamp:  time.Now().UTC(),
+			Level:      level,
+			Message:    message,
+			TraceID:    traceID,
+			SpanID:     spanID,
+			Attributes: attributes,
+			Error:      errorInfo,
 		}
 		if logJSON, err := json.Marshal(logEntry); err == nil {
 			fmt.Println(string(logJSON))
@@ -292,6 +322,14 @@ func SpanError(ctx context.Context, span oteltrace.Span, err error, message stri
 		span.RecordError(err)
 	}
 	LogError(ctx, err, message, attrs...)
+}
+
+// SpanFatal handles the common pattern: span.RecordError + LogError
+func SpanFatal(ctx context.Context, span oteltrace.Span, err error, message string, attrs ...attribute.KeyValue) {
+	if span != nil {
+		span.RecordError(err)
+	}
+	LogFatal(ctx, err, message, attrs...)
 }
 
 func SpanInfo(ctx context.Context, span oteltrace.Span, message string, attrs ...attribute.KeyValue) {

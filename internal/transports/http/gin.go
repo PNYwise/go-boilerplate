@@ -4,6 +4,7 @@ import (
 	"context"
 	"go-boilerplate/internal/configs"
 	"go-boilerplate/internal/transports/http/handlers"
+	"go-boilerplate/internal/transports/http/middlewares"
 	"go-boilerplate/internal/transports/http/routers"
 	"net/http"
 	"time"
@@ -53,7 +54,7 @@ func NewHTTPServer(
 	r.Use(otelgin.Middleware(cfg.AppName))
 
 	// Standard middleware
-	r.Use(gin.Recovery())
+	r.Use(middlewares.CustomRecoveryMiddleware())
 
 	// Health route stays here
 	r.GET("/healthz", func(c *gin.Context) {
