@@ -17,7 +17,10 @@ func TestHealthService(t *testing.T) {
 
 	validator := validator.New()
 
-	healthService := services.NewHealthService(cfg, validator)
+	healthService := services.NewHealthService(services.HealthServiceParams{
+		Cfg: cfg,
+		V:   validator,
+	})
 
 	// Test Check method
 	ctx := context.Background()
@@ -28,8 +31,8 @@ func TestHealthService(t *testing.T) {
 
 	// Test GetStatus method
 	status := healthService.GetStatus(ctx)
-	if status["status"] != "healthy" {
-		t.Errorf("Expected status to be 'healthy', got: %v", status["status"])
+	if status["http"] != "healthy" {
+		t.Errorf("Expected http status to be 'healthy', got: %v", status["http"])
 	}
 
 	if status["app"] != "test-app" {

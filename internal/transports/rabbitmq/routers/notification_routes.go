@@ -4,11 +4,14 @@ import (
 	"context"
 	"go-boilerplate/internal/messaging"
 	"go-boilerplate/internal/transports/rabbitmq/handlers"
+
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // RegisterNotificationRoutes declares the queue and binds it to the handler
 func RegisterNotificationRoutes(
 	ctx context.Context,
+	dlxExchange string,
 	queueName string,
 	prefetch int,
 	consumer messaging.Consumer,
@@ -16,7 +19,12 @@ func RegisterNotificationRoutes(
 ) error {
 
 	// 1. Declare the queue
-	_, err := consumer.DeclareQueue(queueName)
+	args := amqp.Table{}
+	if dlxExchange != "" {
+		args["x-dead-letter-exchange"] = dlxExchange
+	}
+
+	_, err := consumer.DeclareQueue(queueName, args)
 	if err != nil {
 		return err
 	}

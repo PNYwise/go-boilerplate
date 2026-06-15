@@ -8,6 +8,7 @@ import (
 	"go-boilerplate/internal/transports/rabbitmq/routers"
 	"go-boilerplate/internal/utils/logs"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/fx"
 )
 
@@ -47,14 +48,42 @@ func NewRabbitMQServer(
 
 // Start begins consuming messages
 func (s *Server) Start(ctx context.Context) error {
+	dlxExchange := s.config.RabbitDLX
+	dlxQueue := s.config.RabbitDLXQueue
+
+	if dlxExchange != "" && dlxQueue != "" {
+		// 1. Declare DLX Exchange
+		if err := s.consumer.DeclareExchange(dlxExchange, "direct"); err != nil {
+			logs.LogError(ctx, err, "Failed to declare DLX exchange")
+			return err
+		}
+
+		// 2. Declare DLX Queue
+		if _, err := s.consumer.DeclareQueue(dlxQueue, nil); err != nil {
+			logs.LogError(ctx, err, "Failed to declare DLX queue")
+			return err
+		}
+
+		// 3. Bind DLX Queue to Exchange
+		if err := s.consumer.BindQueue(dlxQueue, "", dlxExchange); err != nil {
+			logs.LogError(ctx, err, "Failed to bind DLX queue to exchange")
+			return err
+		}
+
+		logs.LogInfo(ctx, "DLX topology configured",
+			attribute.String("dlx_exchange", dlxExchange),
+			attribute.String("dlx_queue", dlxQueue),
+		)
+	}
+
 	// Register all rabbitmq consumer routes
-	err := routers.RegisterAuditRoutes(ctx, s.config.RabbitAuditQueue, s.config.RabbitAuditPrefetch, s.consumer, s.auditWorker)
+	err := routers.RegisterAuditRoutes(ctx, dlxExchange, s.config.RabbitAuditQueue, s.config.RabbitAuditPrefetch, s.consumer, s.auditWorker)
 	if err != nil {
 		logs.LogError(ctx, err, "Failed to register rabbitmq audit routes")
 		return err
 	}
 
-	err = routers.RegisterNotificationRoutes(ctx, s.config.RabbitNotificationQueue, s.config.RabbitNotificationPrefetch, s.consumer, s.notificationWorker)
+	err = routers.RegisterNotificationRoutes(ctx, dlxExchange, s.config.RabbitNotificationQueue, s.config.RabbitNotificationPrefetch, s.consumer, s.notificationWorker)
 	if err != nil {
 		logs.LogError(ctx, err, "Failed to register rabbitmq notification routes")
 		return err

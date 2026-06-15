@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go-boilerplate/internal/dbs"
 	"go-boilerplate/internal/utils/logs"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/rs/xid"
@@ -19,7 +20,7 @@ type MessageHandler func(ctx context.Context, msg amqp.Delivery) error
 // Consumer defines the contract for interacting with RabbitMQ as a listener
 type Consumer interface {
 	DeclareExchange(exchange string, kind string) error
-	DeclareQueue(queue string) (amqp.Queue, error)
+	DeclareQueue(queue string, args amqp.Table) (amqp.Queue, error)
 	BindQueue(queue string, routingKey string, exchange string) error
 	Consume(ctx context.Context, queue string, prefetch int, handler MessageHandler) error
 	Close() error
@@ -64,7 +65,7 @@ func (c *consumer) DeclareExchange(exchange string, kind string) error {
 	)
 }
 
-func (c *consumer) DeclareQueue(queue string) (amqp.Queue, error) {
+func (c *consumer) DeclareQueue(queue string, args amqp.Table) (amqp.Queue, error) {
 	ch, err := c.getChannel()
 	if err != nil {
 		return amqp.Queue{}, err
@@ -77,7 +78,7 @@ func (c *consumer) DeclareQueue(queue string) (amqp.Queue, error) {
 		false, // delete when unused
 		false, // exclusive
 		false, // no-wait
-		nil,   // arguments
+		args,  // arguments
 	)
 }
 
@@ -135,30 +136,93 @@ func (c *consumer) Consume(ctx context.Context, queue string, prefetch int, hand
 
 	// Run the listening loop in a goroutine
 	go func() {
-		defer ch.Close()
+		defer func() {
+			if ch != nil {
+				ch.Close()
+			}
+		}()
+
 		for {
-			select {
-			case <-ctx.Done():
-				return // Context canceled, stop consuming
-			case msg, ok := <-msgs:
-				if !ok {
-					return // Channel closed, stop consuming
+		ProcessLoop:
+			for {
+				select {
+				case <-ctx.Done():
+					return // Context canceled, stop consuming
+				case msg, ok := <-msgs:
+					if !ok {
+						break ProcessLoop // Channel closed, stop inner loop to reconnect
+					}
+
+					// Extract trace context from AMQP headers
+					ctxWithTrace := otel.GetTextMapPropagator().Extract(ctx, headersCarrier(msg.Headers))
+
+					// Create a span for message processing using the inherited context
+					processCtx, span := c.tracer.Start(ctxWithTrace, "RabbitMQ.Consume")
+
+					err := handler(processCtx, msg)
+					if err != nil {
+						logs.SpanError(processCtx, span, err, fmt.Sprintf("Failed to process message from queue: %s", queue))
+						// Nack and discard (this routes it to the DLX automatically)
+						if nackErr := msg.Nack(false, false); nackErr != nil {
+							logs.SpanError(processCtx, span, nackErr, "Failed to Nack message")
+						}
+					} else {
+						// Ack message
+						if ackErr := msg.Ack(false); ackErr != nil {
+							logs.SpanError(processCtx, span, ackErr, "Failed to Ack message")
+						}
+					}
+
+					span.End()
 				}
+			}
 
-				// Create a span for message processing
-				processCtx, span := c.tracer.Start(context.Background(), "RabbitMQ.Consume")
+			if ctx.Err() != nil {
+				return // Context canceled during ProcessLoop
+			}
 
-				err := handler(processCtx, msg)
-				if err != nil {
-					logs.SpanError(processCtx, span, err, fmt.Sprintf("Failed to process message from queue: %s", queue))
-					// Nack and requeue
-					_ = msg.Nack(false, true)
-				} else {
-					// Ack message
-					_ = msg.Ack(false)
+			// If we got here, the channel was closed. Reconnect loop:
+			logs.LogWarn(ctx, "RabbitMQ consumer channel closed. Attempting to reconnect...", attribute.String("queue", queue))
+
+			ticker := time.NewTicker(3 * time.Second)
+		ReconnectLoop:
+			for {
+				select {
+				case <-ctx.Done():
+					ticker.Stop()
+					return
+				case <-ticker.C:
+					// Wait for the underlying connection to be restored by rabbitmq.go
+					if !c.conn.IsConnected() {
+						continue // Still disconnected, wait and try again
+					}
+
+					newCh, err := c.getChannel()
+					if err != nil {
+						logs.LogError(ctx, err, "Failed to get new channel during reconnect")
+						continue
+					}
+
+					if prefetch > 0 {
+						if err := newCh.Qos(prefetch, 0, false); err != nil {
+							newCh.Close()
+							continue
+						}
+					}
+
+					newMsgs, err := newCh.Consume(queue, consumerTag, false, false, false, false, nil)
+					if err != nil {
+						newCh.Close()
+						logs.LogError(ctx, err, "Failed to resume consuming during reconnect")
+						continue
+					}
+
+					ch = newCh
+					msgs = newMsgs
+					logs.LogInfo(ctx, "RabbitMQ consumer reconnected successfully", attribute.String("queue", queue))
+					ticker.Stop()
+					break ReconnectLoop
 				}
-
-				span.End()
 			}
 		}
 	}()
