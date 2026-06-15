@@ -6,9 +6,11 @@ import (
 	userdtos "go-boilerplate/internal/dtos/user_dtos"
 	"go-boilerplate/internal/messaging"
 	"go-boilerplate/internal/services"
+	"go-boilerplate/internal/utils/httpclient"
 	"go-boilerplate/internal/utils/logs"
 	"net/http"
 	"strconv"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel"
@@ -22,14 +24,16 @@ type UserHandler struct {
 	userSrv  services.UserService
 	producer messaging.Producer
 	tracer   trace.Tracer
+	client   httpclient.Client
 }
 
 // NewUserHandler creates a new UserHandler
-func NewUserHandler(config configs.Config, userSrv services.UserService, producer messaging.Producer) *UserHandler {
+func NewUserHandler(config configs.Config, userSrv services.UserService, producer messaging.Producer, client httpclient.Client) *UserHandler {
 	return &UserHandler{
 		config:   config,
 		userSrv:  userSrv,
 		producer: producer,
+		client:   client,
 		tracer:   otel.Tracer("user-handler"),
 	}
 }
@@ -144,6 +148,21 @@ func (h *UserHandler) GetUserList(c *gin.Context) {
 	logs.SpanInfo(ctx, span, "Users retrieved successfully",
 		attribute.Int("total_items", int(users.Pagination.TotalItems)),
 	)
+
+	// User requested feature: if there's at least one user, hit the detail API
+	if len(users.Users) > 0 {
+		firstUserID := users.Users[0].ID
+		url := fmt.Sprintf("http://localhost:8080/api/v1/users/%d", firstUserID)
+		resp, body, err := h.client.Get(ctx, url, nil)
+		if err != nil {
+			logs.SpanError(ctx, span, err, "Failed to call user detail API via http client")
+		} else {
+			logs.SpanInfo(ctx, span, "Successfully hit user detail API via http client",
+				attribute.Int("status_code", resp.StatusCode),
+				attribute.String("response_body", string(body)),
+			)
+		}
+	}
 
 	c.JSON(http.StatusOK, users)
 }

@@ -68,7 +68,8 @@ type Config struct {
 
 	LogLevel string
 
-	AppName            string
+	HttpClientTimeoutSec int
+	AppName              string
 	HTTPAddr           string
 	CorsAllowedOrigins []string
 	GrpcAddr           string
@@ -84,6 +85,8 @@ func MustLoad(stage string) Config {
 
 	// Build config from environment (with defaults)
 	cfg := Config{
+		HttpClientTimeoutSec: getenvInt("HTTP_CLIENT_TIMEOUT_SEC", 60),
+
 		// Rabbit
 		RabbitURL:             getenv("RABBIT_URL", ""),
 		RabbitExchange:             getenv("RABBIT_EXCHANGE", ""),
@@ -131,7 +134,7 @@ func MustLoad(stage string) Config {
 		LogLevel: getenv("LOG_LEVEL", ""),
 
 		CorsAllowedOrigins: splitCSVDefault(getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"), []string{"http://localhost:3000"}),
-		AppName:            getenv("APP_NAME", "example"),
+		AppName:            getenv("APP_NAME", "example_app"),
 		HTTPAddr:           getenv("HTTP_ADDR", ":8080"),
 		GrpcAddr:           getenv("GRPC_ADDR", ":9090"),
 	}
