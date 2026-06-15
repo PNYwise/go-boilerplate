@@ -1,7 +1,3 @@
--- Initialize the database
-CREATE DATABASE IF NOT EXISTS testdb;
-USE testdb;
-
 -- Create users table
 CREATE TABLE IF NOT EXISTS users (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,

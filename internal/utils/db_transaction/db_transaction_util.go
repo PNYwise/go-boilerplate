@@ -39,8 +39,7 @@ func (r *dbTransactionUtil) RollbackTx(tx *sql.Tx) error {
 	return nil
 }
 
-
-func (r *dbTransactionUtil) CommitTx(tx *sql.Tx) (error) {
+func (r *dbTransactionUtil) CommitTx(tx *sql.Tx) error {
 	err := tx.Commit()
 	if err != nil {
 		return err
@@ -48,7 +47,7 @@ func (r *dbTransactionUtil) CommitTx(tx *sql.Tx) (error) {
 	return nil
 }
 
-func (r *dbTransactionUtil) RollbackOrCommitTx(tx *sql.Tx, err error) (error) {
+func (r *dbTransactionUtil) RollbackOrCommitTx(tx *sql.Tx, err error) error {
 	if err != nil {
 		rollbackErr := r.RollbackTx(tx)
 		if rollbackErr != nil {

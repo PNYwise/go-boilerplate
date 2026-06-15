@@ -24,7 +24,7 @@ LDFLAGS=-ldflags="-s -w"
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build dev prod clean wire docker-build docker-run docker-prod docker-clean
+.PHONY: help build dev prod clean docker-build docker-run docker-prod docker-clean
 
 help: ## ✨ Show this help message
 	@echo "Available commands:"
@@ -32,15 +32,13 @@ help: ## ✨ Show this help message
 
 build: ## 📦 Build the application binary
 	@$(MAKE) clean
-	@$(MAKE) wire
 	@echo "Building binary..."
-	@$(GO) build $(LDFLAGS) -o ./cmd/$(BINARY_NAME) $(CMD_PATH)
+	@$(GO) build $(LDFLAGS) -a -o ./cmd/$(BINARY_NAME) $(CMD_PATH)
 	@echo "Binary created at cmd/$(BINARY_NAME)"
 
 dev: ## 🚀 Run the application in development mode (with hot-reload)
-	@echo "Starting dev server with hot-reload (requires 'air')..."
-	@echo "Install with: go install github.com/air-verse/air@latest"
-	@air -c .air.dev.toml
+	@echo "Starting dev server with hot-reload using 'go run'..."
+	@go run github.com/air-verse/air@latest -c .air.toml
 
 test: ## 🧪 Run all tests
 	@echo "Running tests..."
@@ -50,15 +48,9 @@ coverage: ## 🧪 coverage report
 	@echo "Running tests..."
 	@$(GO) tool cover -html=coverage.out
 
-wire: ## ⚡ Generate wire dependency injection code
-	@echo "Generating wire dependency injection code..."
-	@cd internal/apps && wire
-	@echo "Wire code generation completed"
-
 local: ## 🚀 Run the application in local mode (with hot-reload)
-	@echo "Starting dev server with hot-reload (requires 'air')..."
-	@echo "Install with: go install github.com/air-verse/air@latest"
-	@air -c .air.local.toml
+	@echo "Starting dev server with hot-reload using 'go run'..."
+	@go run github.com/air-verse/air@latest -c .air.local.toml
 
 prod: ## ⚙️  Run the application in production mode
 	@$(MAKE) build
@@ -69,3 +61,12 @@ clean: ## 🧹 Remove build artifacts
 	@echo "Cleaning up..."
 	@rm -rf ./cmd/main
 	@echo "Done."
+
+migrate-create: ## 🛠️  Create a new database migration file (usage: make migrate-create name=my_migration)
+	@if [ -z "$(name)" ]; then \
+		echo "Error: name is required. Usage: make migrate-create name=my_migration"; \
+		exit 1; \
+	fi
+	@echo "Creating migration files for $(name)..."
+	@go run -tags 'mysql' github.com/golang-migrate/migrate/v4/cmd/migrate@latest create -ext sql -dir internal/dbs/migrations -seq $(name)
+	@echo "Migration created successfully."

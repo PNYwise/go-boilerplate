@@ -18,8 +18,11 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -33,6 +36,11 @@ import (
 
 // LogLevel represents log level enumeration
 type LogLevel string
+
+type startTimeKeyType struct{}
+
+// Keys to store context
+var StartTimeKey = startTimeKeyType{}
 
 const (
 	LogLevelDebug LogLevel = "debug"
@@ -65,28 +73,30 @@ type ErrorInfo struct {
 // ZapLogger wraps Zap logger with OpenTelemetry integration
 type ZapLogger struct {
 	logger *zap.Logger
-	sugar  *zap.SugaredLogger
+	skip1  *zap.Logger
 }
 
-func (z *ZapLogger) Info(msg string, fields ...zap.Field)  { z.logger.Info(msg, fields...) }
-func (z *ZapLogger) Debug(msg string, fields ...zap.Field) { z.logger.Debug(msg, fields...) }
-func (z *ZapLogger) Warn(msg string, fields ...zap.Field)  { z.logger.Warn(msg, fields...) }
-func (z *ZapLogger) Error(msg string, fields ...zap.Field) { z.logger.Error(msg, fields...) }
-func (z *ZapLogger) Fatal(msg string, fields ...zap.Field) { z.logger.Fatal(msg, fields...) }
+func (z *ZapLogger) Info(msg string, fields ...zap.Field)  { z.skip1.Info(msg, fields...) }
+func (z *ZapLogger) Debug(msg string, fields ...zap.Field) { z.skip1.Debug(msg, fields...) }
+func (z *ZapLogger) Warn(msg string, fields ...zap.Field)  { z.skip1.Warn(msg, fields...) }
+func (z *ZapLogger) Error(msg string, fields ...zap.Field) { z.skip1.Error(msg, fields...) }
+func (z *ZapLogger) Fatal(msg string, fields ...zap.Field) { z.skip1.Fatal(msg, fields...) }
 
 // With adds structured context to the logger
 func (z *ZapLogger) With(fields ...zap.Field) *ZapLogger {
+	newLogger := z.logger.With(fields...)
 	return &ZapLogger{
-		logger: z.logger.With(fields...),
-		sugar:  z.logger.With(fields...).Sugar(),
+		logger: newLogger,
+		skip1:  newLogger.WithOptions(zap.AddCallerSkip(1)),
 	}
 }
 
-// Global variables
 var (
 	tracerProvider *sdktrace.TracerProvider
 	serviceConfig  configs.Config
 	globalLogger   *ZapLogger
+	skip1Logger    *zap.Logger
+	skip2Logger    *zap.Logger
 )
 
 // InitializeOpenTelemetry sets up OpenTelemetry. Only sends to OTLP endpoint (high performance).
@@ -109,53 +119,82 @@ func InitializeOpenTelemetry(cfg configs.Config) (func(), error) {
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	if strings.TrimSpace(cfg.OtelOtlpEndpoint) == "" {
-		if err := initializeZapLogger(cfg, nil, nil); err != nil {
-			return nil, err
+	var spanProcessors []sdktrace.SpanProcessor
+	var logExporter sdklog.Exporter
+
+	if cfg.OtelEnabled && strings.TrimSpace(cfg.OtelOtlpEndpoint) != "" {
+		baseURL := strings.TrimRight(strings.TrimSpace(cfg.OtelOtlpEndpoint), "/")
+
+		var traceExporter sdktrace.SpanExporter
+		var metricExporter sdkmetric.Exporter
+		var err error
+
+		if strings.ToLower(cfg.OtelProtocol) == "grpc" {
+			traceExporter, err = otlptracegrpc.New(ctx, otlptracegrpc.WithEndpointURL(baseURL), otlptracegrpc.WithInsecure())
+			if err != nil {
+				return nil, fmt.Errorf("build grpc trace exporter: %w", err)
+			}
+
+			logExporter, err = otlploggrpc.New(ctx, otlploggrpc.WithEndpointURL(baseURL), otlploggrpc.WithInsecure())
+			if err != nil {
+				return nil, fmt.Errorf("build grpc log exporter: %w", err)
+			}
+
+			metricExporter, err = otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithEndpointURL(baseURL), otlpmetricgrpc.WithInsecure())
+			if err != nil {
+				return nil, fmt.Errorf("build grpc metric exporter: %w", err)
+			}
+		} else {
+			traceExporter, err = otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(baseURL+"/v1/traces"), otlptracehttp.WithInsecure())
+			if err != nil {
+				return nil, fmt.Errorf("build http trace exporter: %w", err)
+			}
+
+			logExporter, err = otlploghttp.New(ctx, otlploghttp.WithEndpointURL(baseURL+"/v1/logs"), otlploghttp.WithInsecure())
+			if err != nil {
+				return nil, fmt.Errorf("build http log exporter: %w", err)
+			}
+
+			metricExporter, err = otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpointURL(baseURL+"/v1/metrics"), otlpmetrichttp.WithInsecure())
+			if err != nil {
+				return nil, fmt.Errorf("build http metric exporter: %w", err)
+			}
 		}
-		globalLogger.Info("Running WITHOUT OpenTelemetry (OTLP Endpoint empty)")
-		return func() {}, nil
+
+		spanProcessors = append(spanProcessors, sdktrace.NewBatchSpanProcessor(traceExporter))
+
+		metricProvider := sdkmetric.NewMeterProvider(
+			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter, sdkmetric.WithInterval(15*time.Second))),
+			sdkmetric.WithResource(res),
+		)
+		otel.SetMeterProvider(metricProvider)
+
+		if err := otelruntime.Start(otelruntime.WithMeterProvider(metricProvider)); err != nil {
+			return nil, fmt.Errorf("start runtime metrics: %w", err)
+		}
 	}
 
-	traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(cfg.OtelOtlpEndpoint), otlptracegrpc.WithInsecure())
-	if err != nil {
-		return nil, fmt.Errorf("build trace exporter: %w", err)
-	}
-
-	logExporter, err := otlploggrpc.New(ctx, otlploggrpc.WithEndpoint(cfg.OtelOtlpEndpoint), otlploggrpc.WithInsecure())
-	if err != nil {
-		return nil, fmt.Errorf("build log exporter: %w", err)
-	}
-
-	metricExporter, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithEndpoint(cfg.OtelOtlpEndpoint), otlpmetricgrpc.WithInsecure())
-	if err != nil {
-		return nil, fmt.Errorf("build metric exporter: %w", err)
-	}
-
-	tracerProvider = sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(traceExporter),
+	opts := []sdktrace.TracerProviderOption{
 		sdktrace.WithResource(res),
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-	)
-
-	metricProvider := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter, sdkmetric.WithInterval(15*time.Second))),
-		sdkmetric.WithResource(res),
-	)
-
-	otel.SetTracerProvider(tracerProvider)
-	otel.SetMeterProvider(metricProvider)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
-
-	if err := otelruntime.Start(otelruntime.WithMeterProvider(metricProvider)); err != nil {
-		return nil, fmt.Errorf("start runtime metrics: %w", err)
 	}
+	for _, sp := range spanProcessors {
+		opts = append(opts, sdktrace.WithSpanProcessor(sp))
+	}
+
+	tracerProvider = sdktrace.NewTracerProvider(opts...)
+	otel.SetTracerProvider(tracerProvider)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
 	if err := initializeZapLogger(cfg, res, logExporter); err != nil {
 		return nil, fmt.Errorf("failed to initialize Zap logger: %w", err)
 	}
 
-	globalLogger.Info("OpenTelemetry initialized (sending data to Collector only)")
+	if cfg.OtelEnabled && strings.TrimSpace(cfg.OtelOtlpEndpoint) != "" {
+		globalLogger.Info("OpenTelemetry initialized WITH exporter (sending data to Collector)")
+	} else {
+		globalLogger.Info("Running WITHOUT OpenTelemetry exporter (local span generation only)")
+	}
 
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -179,9 +218,26 @@ func initializeZapLogger(cfg configs.Config, res *resource.Resource, logExporter
 		level = zapcore.InfoLevel
 	}
 
+	if cfg.LogLevel != "" {
+		switch strings.ToLower(cfg.LogLevel) {
+		case "debug":
+			level = zapcore.DebugLevel
+		case "info":
+			level = zapcore.InfoLevel
+		case "warn", "warning":
+			level = zapcore.WarnLevel
+		case "error":
+			level = zapcore.ErrorLevel
+		case "fatal":
+			level = zapcore.FatalLevel
+		}
+	}
+
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = "@timestamp"
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+		enc.AppendString(t.UTC().Format("2006-01-02T15:04:05.000Z"))
+	}
 
 	stdoutCore := zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(os.Stdout), level)
 	var cores []zapcore.Core = []zapcore.Core{stdoutCore}
@@ -203,36 +259,38 @@ func initializeZapLogger(cfg configs.Config, res *resource.Resource, logExporter
 
 	globalLogger = &ZapLogger{
 		logger: logger,
-		sugar:  logger.Sugar(),
+		skip1:  logger.WithOptions(zap.AddCallerSkip(1)),
 	}
+	skip1Logger = globalLogger.skip1
+	skip2Logger = logger.WithOptions(zap.AddCallerSkip(2))
 
 	return nil
 }
 
 // Convenience global logging functions
 func Info(msg string, fields ...zap.Field) {
-	if globalLogger != nil {
-		globalLogger.Info(msg, fields...)
+	if skip1Logger != nil {
+		skip1Logger.Info(msg, fields...)
 	}
 }
 func Debug(msg string, fields ...zap.Field) {
-	if globalLogger != nil {
-		globalLogger.Debug(msg, fields...)
+	if skip1Logger != nil {
+		skip1Logger.Debug(msg, fields...)
 	}
 }
 func Warn(msg string, fields ...zap.Field) {
-	if globalLogger != nil {
-		globalLogger.Warn(msg, fields...)
+	if skip1Logger != nil {
+		skip1Logger.Warn(msg, fields...)
 	}
 }
 func Error(msg string, fields ...zap.Field) {
-	if globalLogger != nil {
-		globalLogger.Error(msg, fields...)
+	if skip1Logger != nil {
+		skip1Logger.Error(msg, fields...)
 	}
 }
 func Fatal(msg string, fields ...zap.Field) {
-	if globalLogger != nil {
-		globalLogger.Fatal(msg, fields...)
+	if skip1Logger != nil {
+		skip1Logger.Fatal(msg, fields...)
 	}
 }
 
@@ -279,25 +337,44 @@ func logStructured(ctx context.Context, level LogLevel, message string, errorInf
 		attributes[string(attr.Key)] = attr.Value.AsInterface()
 	}
 
+	// Automatically calculate and inject http.duration for every log if StartTimeKey is present
+	var durationStr string
+	if d, ok := attributes["http.duration"].(string); ok {
+		durationStr = d
+	} else if start, ok := ctx.Value(StartTimeKey).(time.Time); ok {
+		durationStr = time.Since(start).String()
+		attributes["http.duration"] = durationStr
+	}
+
+	if durationStr != "" {
+		message = fmt.Sprintf("%s - %s", message, durationStr)
+	}
+
 	if globalLogger != nil {
 		fields := []zap.Field{
 			zap.String("trace.id", traceID),
 			zap.String("span.id", spanID),
-			zap.Any("attributes", attributes),
 		}
+
+		for k, v := range attributes {
+			fields = append(fields, zap.Any(k, v))
+		}
+
 		if errorInfo != nil {
 			fields = append(fields, zap.Any("error", errorInfo))
 		}
 
 		switch level {
 		case LogLevelDebug:
-			globalLogger.Debug(message, fields...)
+			skip2Logger.Debug(message, fields...)
 		case LogLevelInfo:
-			globalLogger.Info(message, fields...)
+			skip2Logger.Info(message, fields...)
 		case LogLevelWarn:
-			globalLogger.Warn(message, fields...)
+			skip2Logger.Warn(message, fields...)
 		case LogLevelError:
-			globalLogger.Error(message, fields...)
+			skip2Logger.Error(message, fields...)
+		case LogLevelFatal:
+			skip2Logger.Fatal(message, fields...)
 		}
 	} else {
 		// Absolute Fallback
@@ -321,7 +398,11 @@ func SpanError(ctx context.Context, span oteltrace.Span, err error, message stri
 	if span != nil {
 		span.RecordError(err)
 	}
-	LogError(ctx, err, message, attrs...)
+	var errorInfo *ErrorInfo
+	if err != nil {
+		errorInfo = &ErrorInfo{Message: err.Error(), Type: fmt.Sprintf("%T", err)}
+	}
+	logStructured(ctx, LogLevelError, message, errorInfo, attrs...)
 }
 
 // SpanFatal handles the common pattern: span.RecordError + LogError
@@ -329,14 +410,18 @@ func SpanFatal(ctx context.Context, span oteltrace.Span, err error, message stri
 	if span != nil {
 		span.RecordError(err)
 	}
-	LogFatal(ctx, err, message, attrs...)
+	var errorInfo *ErrorInfo
+	if err != nil {
+		errorInfo = &ErrorInfo{Message: err.Error(), Type: fmt.Sprintf("%T", err)}
+	}
+	logStructured(ctx, LogLevelFatal, message, errorInfo, attrs...)
 }
 
 func SpanInfo(ctx context.Context, span oteltrace.Span, message string, attrs ...attribute.KeyValue) {
 	if span != nil && len(attrs) > 0 {
 		span.SetAttributes(attrs...)
 	}
-	LogInfo(ctx, message, attrs...)
+	logStructured(ctx, LogLevelInfo, message, nil, attrs...)
 }
 
 // SpanWarn logs warning with span attributes (optional)
@@ -344,7 +429,7 @@ func SpanWarn(ctx context.Context, span oteltrace.Span, message string, attrs ..
 	if span != nil && len(attrs) > 0 {
 		span.SetAttributes(attrs...)
 	}
-	LogWarn(ctx, message, attrs...)
+	logStructured(ctx, LogLevelWarn, message, nil, attrs...)
 }
 
 // SpanDebug logs debug with span attributes (optional)
@@ -352,7 +437,7 @@ func SpanDebug(ctx context.Context, span oteltrace.Span, message string, attrs .
 	if span != nil && len(attrs) > 0 {
 		span.SetAttributes(attrs...)
 	}
-	LogDebug(ctx, message, attrs...)
+	logStructured(ctx, LogLevelDebug, message, nil, attrs...)
 }
 
 // Sync flushes any buffered log entries

@@ -4,7 +4,6 @@ import (
 	"context"
 	"go-boilerplate/internal/configs"
 	"go-boilerplate/internal/transports/http/handlers"
-	"go-boilerplate/internal/transports/http/middlewares"
 	"go-boilerplate/internal/transports/http/routers"
 	"net/http"
 	"time"
@@ -12,6 +11,8 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+
+	"go-boilerplate/internal/transports/http/middlewares"
 )
 
 // Server holds the Gin engine and services for the HTTP server.
@@ -54,6 +55,7 @@ func NewHTTPServer(
 	r.Use(otelgin.Middleware(cfg.AppName))
 
 	// Standard middleware
+	r.Use(middlewares.RequestLogger())
 	r.Use(middlewares.CustomRecoveryMiddleware())
 
 	// Health route stays here
