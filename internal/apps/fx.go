@@ -30,7 +30,7 @@ import (
 
 	httptransport "go-boilerplate/internal/transports/http"
 	httphandlers "go-boilerplate/internal/transports/http/handlers"
-	dbtransaction "go-boilerplate/internal/utils/db-transaction"
+	dbtransaction "go-boilerplate/internal/utils/db_transaction"
 	"go-boilerplate/internal/utils/validation"
 
 	"github.com/redis/go-redis/v9"

@@ -55,8 +55,8 @@ func NewHTTPServer(
 	r.Use(otelgin.Middleware(cfg.AppName))
 
 	// Standard middleware
-	r.Use(gin.Recovery())
 	r.Use(middlewares.RequestLogger())
+	r.Use(middlewares.CustomRecoveryMiddleware())
 
 	// Health route stays here
 	r.GET("/healthz", func(c *gin.Context) {

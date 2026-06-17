@@ -47,6 +47,7 @@ const (
 	LogLevelInfo  LogLevel = "info"
 	LogLevelWarn  LogLevel = "warn"
 	LogLevelError LogLevel = "error"
+	LogLevelFatal LogLevel = "fatal"
 )
 
 // StructuredLog represents the structure for JSON logs
@@ -227,6 +228,8 @@ func initializeZapLogger(cfg configs.Config, res *resource.Resource, logExporter
 			level = zapcore.WarnLevel
 		case "error":
 			level = zapcore.ErrorLevel
+		case "fatal":
+			level = zapcore.FatalLevel
 		}
 	}
 
@@ -308,6 +311,15 @@ func LogError(ctx context.Context, err error, message string, attrs ...attribute
 	logStructured(ctx, LogLevelError, message, errorInfo, attrs...)
 }
 
+func LogFatal(ctx context.Context, err error, message string, attrs ...attribute.KeyValue) {
+	var errorInfo *ErrorInfo
+	if err != nil {
+		errorInfo = &ErrorInfo{Message: err.Error(), Type: fmt.Sprintf("%T", err)}
+	}
+
+	logStructured(ctx, LogLevelFatal, message, errorInfo, attrs...)
+}
+
 func LogDebug(ctx context.Context, message string, attrs ...attribute.KeyValue) {
 	logStructured(ctx, LogLevelDebug, message, nil, attrs...)
 }
@@ -361,6 +373,8 @@ func logStructured(ctx context.Context, level LogLevel, message string, errorInf
 			skip2Logger.Warn(message, fields...)
 		case LogLevelError:
 			skip2Logger.Error(message, fields...)
+		case LogLevelFatal:
+			skip2Logger.Fatal(message, fields...)
 		}
 	} else {
 		// Absolute Fallback
@@ -389,6 +403,18 @@ func SpanError(ctx context.Context, span oteltrace.Span, err error, message stri
 		errorInfo = &ErrorInfo{Message: err.Error(), Type: fmt.Sprintf("%T", err)}
 	}
 	logStructured(ctx, LogLevelError, message, errorInfo, attrs...)
+}
+
+// SpanFatal handles the common pattern: span.RecordError + LogError
+func SpanFatal(ctx context.Context, span oteltrace.Span, err error, message string, attrs ...attribute.KeyValue) {
+	if span != nil {
+		span.RecordError(err)
+	}
+	var errorInfo *ErrorInfo
+	if err != nil {
+		errorInfo = &ErrorInfo{Message: err.Error(), Type: fmt.Sprintf("%T", err)}
+	}
+	logStructured(ctx, LogLevelFatal, message, errorInfo, attrs...)
 }
 
 func SpanInfo(ctx context.Context, span oteltrace.Span, message string, attrs ...attribute.KeyValue) {

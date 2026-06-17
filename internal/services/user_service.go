@@ -8,7 +8,7 @@ import (
 	userdtos "go-boilerplate/internal/dtos/user_dtos"
 	"go-boilerplate/internal/entities"
 	"go-boilerplate/internal/repositories"
-	dbtransaction "go-boilerplate/internal/utils/db-transaction"
+	dbtransaction "go-boilerplate/internal/utils/db_transaction"
 	"go-boilerplate/internal/utils/logs"
 
 	"github.com/go-playground/validator/v10"
