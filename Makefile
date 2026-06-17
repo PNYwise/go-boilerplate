@@ -24,7 +24,7 @@ LDFLAGS=-ldflags="-s -w"
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build dev prod clean wire docker-build docker-run docker-prod docker-clean
+.PHONY: help build dev prod clean docker-build docker-run docker-prod docker-clean
 
 help: ## ✨ Show this help message
 	@echo "Available commands:"
@@ -33,7 +33,7 @@ help: ## ✨ Show this help message
 build: ## 📦 Build the application binary
 	@$(MAKE) clean
 	@echo "Building binary..."
-	@$(GO) build $(LDFLAGS) -o ./cmd/$(BINARY_NAME) $(CMD_PATH)
+	@$(GO) build $(LDFLAGS) -a -o ./cmd/$(BINARY_NAME) $(CMD_PATH)
 	@echo "Binary created at cmd/$(BINARY_NAME)"
 
 dev: ## 🚀 Run the application in development mode (with hot-reload)
@@ -47,7 +47,6 @@ test: ## 🧪 Run all tests
 coverage: ## 🧪 coverage report
 	@echo "Running tests..."
 	@$(GO) tool cover -html=coverage.out
-
 
 local: ## 🚀 Run the application in local mode (with hot-reload)
 	@echo "Starting dev server with hot-reload using 'go run'..."

@@ -33,7 +33,8 @@ import (
 	httphandlers "go-boilerplate/internal/transports/http/handlers"
 	"go-boilerplate/internal/transports/rabbitmq"
 	rabbitmqhandlers "go-boilerplate/internal/transports/rabbitmq/handlers"
-	dbtransaction "go-boilerplate/internal/utils/db-transaction"
+
+	dbtransaction "go-boilerplate/internal/utils/db_transaction"
 	"go-boilerplate/internal/utils/httpclient"
 	"go-boilerplate/internal/utils/validation"
 
