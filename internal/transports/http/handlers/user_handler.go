@@ -1,16 +1,16 @@
 package handlers
 
 import (
+	"fmt"
+	"go-boilerplate/internal/clients/http_clients"
 	"go-boilerplate/internal/configs"
 	auditdtos "go-boilerplate/internal/dtos/audit_dtos"
 	userdtos "go-boilerplate/internal/dtos/user_dtos"
 	"go-boilerplate/internal/messaging"
 	"go-boilerplate/internal/services"
-	"go-boilerplate/internal/utils/httpclient"
 	"go-boilerplate/internal/utils/logs"
 	"net/http"
 	"strconv"
-	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel"
@@ -24,11 +24,11 @@ type UserHandler struct {
 	userSrv  services.UserService
 	producer messaging.Producer
 	tracer   trace.Tracer
-	client   httpclient.Client
+	client   http_clients.Client
 }
 
 // NewUserHandler creates a new UserHandler
-func NewUserHandler(config configs.Config, userSrv services.UserService, producer messaging.Producer, client httpclient.Client) *UserHandler {
+func NewUserHandler(config configs.Config, userSrv services.UserService, producer messaging.Producer, client http_clients.Client) *UserHandler {
 	return &UserHandler{
 		config:   config,
 		userSrv:  userSrv,

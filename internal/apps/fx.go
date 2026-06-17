@@ -23,6 +23,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"go-boilerplate/internal/clients/http_clients"
 	"go-boilerplate/internal/configs"
 	"go-boilerplate/internal/dbs"
 	"go-boilerplate/internal/messaging"
@@ -35,7 +36,6 @@ import (
 	rabbitmqhandlers "go-boilerplate/internal/transports/rabbitmq/handlers"
 
 	dbtransaction "go-boilerplate/internal/utils/db_transaction"
-	"go-boilerplate/internal/utils/httpclient"
 	"go-boilerplate/internal/utils/validation"
 
 	"github.com/redis/go-redis/v9"
@@ -109,7 +109,7 @@ var InfrastructureModule = fx.Module("infrastructure",
 		dbtransaction.NewDbTransactionUtil,
 		messaging.NewProducer,
 		messaging.NewConsumer,
-		httpclient.NewHttpClient,
+		http_clients.NewHttpClient,
 		// Input validation (singleton via sync.Once internally)
 		validation.GetValidator,
 
