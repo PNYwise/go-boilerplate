@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go-boilerplate/internal/configs"
 	"go-boilerplate/internal/utils/logs"
+	"log"
 )
 
 // App represents the core application - DO NOT MODIFY
@@ -53,6 +54,7 @@ func (a *App) Run(ctx context.Context) error {
 	// Panic recovery to ensure cleanup happens
 	defer func() {
 		if r := recover(); r != nil {
+			log.Printf("[PANIC RECOVERED] Terjadi panic saat aplikasi berjalan (Run): %v\n", r)
 			a.ShutdownWithPanic()
 		}
 	}()
@@ -76,6 +78,7 @@ func (a *App) shutdown() {
 	defer func() {
 		if r := recover(); r != nil {
 			// Handle panic during shutdown
+			log.Printf("[PANIC RECOVERED] Terjadi panic saat proses shutdown utama: %v\n", r)
 		}
 	}()
 
@@ -84,6 +87,7 @@ func (a *App) shutdown() {
 			defer func() {
 				if r := recover(); r != nil {
 					// Handle panic during cleanup
+					log.Printf("[PANIC RECOVERED] Terjadi panic saat mengeksekusi cleanup(): %v\n", r)
 				}
 			}()
 			a.cleanup()
@@ -96,6 +100,7 @@ func (a *App) shutdown() {
 			defer func() {
 				if r := recover(); r != nil {
 					// Handle panic during server shutdown
+					log.Printf("[PANIC RECOVERED] Terjadi panic saat server shutdown: %v\n", r)
 				}
 			}()
 			// Server shutdown handled by context cancellation in Run method
