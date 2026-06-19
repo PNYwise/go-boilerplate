@@ -1,10 +1,7 @@
 package handlers
 
 import (
-	"fmt"
-	"go-boilerplate/internal/clients/http_clients"
 	"go-boilerplate/internal/configs"
-	auditdtos "go-boilerplate/internal/dtos/audit_dtos"
 	userdtos "go-boilerplate/internal/dtos/user_dtos"
 	"go-boilerplate/internal/messaging"
 	"go-boilerplate/internal/services"
@@ -24,17 +21,14 @@ type UserHandler struct {
 	userSrv  services.UserService
 	producer messaging.Producer
 	tracer   trace.Tracer
-	client   http_clients.Client
 }
 
 // NewUserHandler creates a new UserHandler
-func NewUserHandler(config configs.Config, userSrv services.UserService, producer messaging.Producer, client http_clients.Client) *UserHandler {
+func NewUserHandler(config configs.Config, userSrv services.UserService) *UserHandler {
 	return &UserHandler{
-		config:   config,
-		userSrv:  userSrv,
-		producer: producer,
-		client:   client,
-		tracer:   otel.Tracer("user-handler"),
+		config:  config,
+		userSrv: userSrv,
+		tracer:  otel.Tracer("user-handler"),
 	}
 }
 
@@ -70,22 +64,6 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	logs.SpanInfo(ctx, span, "User created successfully",
 		attribute.Int64("user_id", user.ID),
 	)
-
-	// Publish Audit Log Event
-	auditPayload := auditdtos.CreateAuditLogDTO{
-		Action:   "USER_CREATED",
-		Entity:   "USER",
-		EntityID: strconv.FormatInt(user.ID, 10),
-		ActorID:  user.ID, // Self-registration
-	}
-	_ = h.producer.PublishMessage(ctx, "", h.config.RabbitAuditQueue, "AUDIT_LOG", auditPayload)
-
-	// Publish Welcome Email Notification Command
-	emailPayload := map[string]string{
-		"email": user.Email,
-		"name":  user.Username,
-	}
-	_ = h.producer.PublishMessage(ctx, "", h.config.RabbitNotificationQueue, "USER_WELCOME_EMAIL", emailPayload)
 
 	c.JSON(http.StatusCreated, user)
 }
@@ -148,21 +126,6 @@ func (h *UserHandler) GetUserList(c *gin.Context) {
 	logs.SpanInfo(ctx, span, "Users retrieved successfully",
 		attribute.Int("total_items", int(users.Pagination.TotalItems)),
 	)
-
-	// User requested feature: if there's at least one user, hit the detail API
-	if len(users.Users) > 0 {
-		firstUserID := users.Users[0].ID
-		url := fmt.Sprintf("http://localhost:8080/api/v1/users/%d", firstUserID)
-		resp, body, err := h.client.Get(ctx, url, nil)
-		if err != nil {
-			logs.SpanError(ctx, span, err, "Failed to call user detail API via http client")
-		} else {
-			logs.SpanInfo(ctx, span, "Successfully hit user detail API via http client",
-				attribute.Int("status_code", resp.StatusCode),
-				attribute.String("response_body", string(body)),
-			)
-		}
-	}
 
 	c.JSON(http.StatusOK, users)
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"go-boilerplate/internal/configs"
-	"go-boilerplate/internal/dbs"
+	"go-boilerplate/internal/messaging"
 	"go-boilerplate/internal/utils/logs"
 	"time"
 
@@ -27,7 +27,7 @@ type healthService struct {
 	v      *validator.Validate
 	db     *sql.DB
 	redis  *redis.Client
-	rabbit *dbs.RabbitMQConnection
+	rabbit *messaging.RabbitMQConnection
 }
 
 // HealthServiceParams holds dependencies for the HealthService
@@ -36,9 +36,9 @@ type HealthServiceParams struct {
 
 	Cfg    configs.Config
 	V      *validator.Validate
-	Db     *sql.DB                 `optional:"true"`
-	Redis  *redis.Client           `optional:"true"`
-	Rabbit *dbs.RabbitMQConnection `optional:"true"`
+	Db     *sql.DB                       `optional:"true"`
+	Redis  *redis.Client                 `optional:"true"`
+	Rabbit *messaging.RabbitMQConnection `optional:"true"`
 }
 
 // NewHealthService creates a new health service instance with OpenTelemetry instrumentation

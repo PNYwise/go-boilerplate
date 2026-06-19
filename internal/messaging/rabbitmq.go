@@ -1,9 +1,10 @@
-package dbs
+package messaging
 
 import (
 	"context"
 	"fmt"
 	"go-boilerplate/internal/configs"
+	"go-boilerplate/internal/utils/conn_name"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -54,7 +55,7 @@ func (r *RabbitMQConnection) connect() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	connName := generateConnName(r.cfg.AppName, "rabbitmq")
+	connName := conn_name.Generate(r.cfg.AppName, "rabbitmq")
 	conn, err := amqp.DialConfig(r.cfg.RabbitURL, amqp.Config{
 		Properties: amqp.Table{
 			"connection_name": connName,
@@ -66,7 +67,7 @@ func (r *RabbitMQConnection) connect() error {
 
 	r.conn = conn
 	r.connected.Store(true)
-	
+
 	log.Printf("RabbitMQ client connected (Name: %s)", connName)
 
 	log.Println("RabbitMQ connected successfully")

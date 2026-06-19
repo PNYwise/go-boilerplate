@@ -104,7 +104,7 @@ var InfrastructureModule = fx.Module("infrastructure",
 		// Database: cleanup registered via fx.Lifecycle in newManagedMySQLDB
 		newManagedMySQLDB,
 		newManagedRedisClient,
-		dbs.NewRabbitMQConnection,
+		messaging.NewRabbitMQConnection,
 		dbs.NewRedsync,
 		dbtransaction.NewDbTransactionUtil,
 		messaging.NewProducer,
@@ -118,7 +118,7 @@ var InfrastructureModule = fx.Module("infrastructure",
 		// queue.NewRabbitMQClient,
 		// cache.NewCacheProvider,
 	),
-	fx.Invoke(func(r *redis.Client, q *dbs.RabbitMQConnection) {
+	fx.Invoke(func(r *redis.Client, q *messaging.RabbitMQConnection) {
 		// Eagerly initialize Redis and RabbitMQ connections on startup
 		// to ensure the app fails fast if infrastructure is unreachable.
 	}),
@@ -132,6 +132,7 @@ var RepositoryModule = fx.Module("repositories",
 	fx.Provide(
 		repositories.NewUserRepository,
 		repositories.NewRoleRepository,
+		repositories.NewRmqPublishMessageRepository,
 		// Add new repositories here:
 		// repositories.NewProductRepository,
 		// repositories.NewOrderRepository,

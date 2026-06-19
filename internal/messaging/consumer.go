@@ -3,7 +3,6 @@ package messaging
 import (
 	"context"
 	"fmt"
-	"go-boilerplate/internal/dbs"
 	"go-boilerplate/internal/utils/logs"
 	"time"
 
@@ -27,16 +26,16 @@ type Consumer interface {
 }
 
 type consumer struct {
-	conn    *dbs.RabbitMQConnection
-	tracer  trace.Tracer
+	conn   *RabbitMQConnection
+	tracer trace.Tracer
 }
 
 // NewConsumer creates a consumer wrapper. It doesn't open channels eagerly
 // because Fx lifecycle hooks haven't connected to RabbitMQ yet during graph construction.
-func NewConsumer(conn *dbs.RabbitMQConnection) (Consumer, error) {
+func NewConsumer(conn *RabbitMQConnection) (Consumer, error) {
 	return &consumer{
-		conn:    conn,
-		tracer:  otel.Tracer("rabbitmq-consumer"),
+		conn:   conn,
+		tracer: otel.Tracer("rabbitmq-consumer"),
 	}, nil
 }
 
@@ -157,7 +156,7 @@ func (c *consumer) Consume(ctx context.Context, queue string, prefetch int, hand
 					ctxWithTrace := otel.GetTextMapPropagator().Extract(ctx, headersCarrier(msg.Headers))
 
 					// Create a span for message processing using the inherited context
-					processCtx, span := c.tracer.Start(ctxWithTrace, "RabbitMQ.Consume")
+					processCtx, span := c.tracer.Start(ctxWithTrace, fmt.Sprintf("RMQ Consumer: %s", queue))
 
 					err := handler(processCtx, msg)
 					if err != nil {

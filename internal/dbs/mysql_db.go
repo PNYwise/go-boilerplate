@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"go-boilerplate/internal/configs"
+	"go-boilerplate/internal/utils/conn_name"
 	"log"
 	"math/rand"
 	"time"
@@ -28,7 +29,7 @@ var migrationFS embed.FS
 // transactions, and connection pool metrics. This provides observability into database
 // performance and integrates seamlessly with the ELK stack via OpenTelemetry traces.
 func NewMySQLDB(cfg configs.Config) (*sql.DB, func(), error) {
-	connName := generateConnName(cfg.AppName, "mysql")
+	connName := conn_name.Generate(cfg.AppName, "mysql")
 
 	// Build DSN with timeouts & parseTime
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&timeout=%ds&readTimeout=%ds&writeTimeout=%ds&multiStatements=true&connectionAttributes=program_name:%s",

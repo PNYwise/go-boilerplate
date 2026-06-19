@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"go-boilerplate/internal/configs"
+	"go-boilerplate/internal/utils/conn_name"
 	"log"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 
 // NewRedisClient creates a new Redis client connection
 func NewRedisClient(cfg configs.Config) (*redis.Client, error) {
-	connName := generateConnName(cfg.AppName, "redis")
+	connName := conn_name.Generate(cfg.AppName, "redis")
 	client := redis.NewClient(&redis.Options{
 		Addr:       fmt.Sprintf("%s:%d", cfg.RedisHost, cfg.RedisPort),
 		Password:   cfg.RedisPassword,

@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"go-boilerplate/internal/configs"
+	auditdtos "go-boilerplate/internal/dtos/audit_dtos"
 	userdtos "go-boilerplate/internal/dtos/user_dtos"
 	"go-boilerplate/internal/entities"
 	"go-boilerplate/internal/repositories"
 	dbtransaction "go-boilerplate/internal/utils/db_transaction"
 	"go-boilerplate/internal/utils/logs"
+	"strconv"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -32,32 +34,38 @@ type UserService interface {
 }
 
 type userService struct {
-	userRepo    repositories.UserRepository
-	roleRepo    repositories.RoleRepository
-	dbtx        dbtransaction.DbTransactionUtil
-	cfg         configs.Config
-	tracer      trace.Tracer // OpenTelemetry tracer for this service
-	v           *validator.Validate
-	redisClient *redis.Client
+	userRepo           repositories.UserRepository
+	userservRepo       repositories.UserServiceRepository
+	roleRepo           repositories.RoleRepository
+	publishMessageRepo repositories.PublishMessageRepository
+	dbtx               dbtransaction.DbTransactionUtil
+	cfg                configs.Config
+	tracer             trace.Tracer // OpenTelemetry tracer for this service
+	v                  *validator.Validate
+	redisClient        *redis.Client
 }
 
 // NewUserService creates a new user service instance with OpenTelemetry instrumentation
 func NewUserService(
 	userRepo repositories.UserRepository,
 	roleRepo repositories.RoleRepository,
+	userservRepo repositories.UserServiceRepository,
+	publishMessageRepo repositories.PublishMessageRepository,
 	dbtx dbtransaction.DbTransactionUtil,
 	cfg configs.Config,
 	v *validator.Validate,
 	redisClient *redis.Client,
 ) UserService {
 	return &userService{
-		userRepo:    userRepo,
-		roleRepo:    roleRepo,
-		dbtx:        dbtx,
-		cfg:         cfg,
-		tracer:      otel.Tracer("user-service"),
-		v:           v,
-		redisClient: redisClient,
+		userRepo:           userRepo,
+		roleRepo:           roleRepo,
+		userservRepo:       userservRepo,
+		publishMessageRepo: publishMessageRepo,
+		dbtx:               dbtx,
+		cfg:                cfg,
+		tracer:             otel.Tracer("user-service"),
+		v:                  v,
+		redisClient:        redisClient,
 	}
 }
 
@@ -133,6 +141,22 @@ func (s *userService) CreateUser(ctx context.Context, dto userdtos.UserCreateDTO
 		attribute.Int64("user_id", id),
 		attribute.String("username", dto.Username),
 	)
+
+	// Publish Audit Log Event
+	auditPayload := auditdtos.CreateAuditLogDTO{
+		Action:   "USER_CREATED",
+		Entity:   "USER",
+		EntityID: strconv.FormatInt(user.ID, 10),
+		ActorID:  user.ID, // Self-registration
+	}
+	_ = s.publishMessageRepo.PublishMessage(ctx, "", s.cfg.RabbitAuditQueue, "AUDIT_LOG", auditPayload)
+
+	// Publish Welcome Email Notification Command
+	emailPayload := map[string]string{
+		"email": user.Email,
+		"name":  user.Username,
+	}
+	_ = s.publishMessageRepo.PublishMessage(ctx, "", s.cfg.RabbitNotificationQueue, "USER_WELCOME_EMAIL", emailPayload)
 
 	return &userdtos.UserResponseDTO{
 		ID:        createdUser.ID,
@@ -229,6 +253,8 @@ func (s *userService) GetUserByID(ctx context.Context, id int64) (*userdtos.User
 		)
 		return nil, err
 	}
+
+	s.userservRepo.GetUserDetailById(ctx, user.ID)
 
 	logs.SpanInfo(ctx, span, "User retrieved successfully",
 		attribute.Int64("user_id", id),

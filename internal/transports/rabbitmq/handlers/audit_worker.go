@@ -26,10 +26,6 @@ func NewAuditWorker(auditSrv services.AuditService) *AuditWorker {
 
 // HandleAuditLog processes messages from the audit log queue
 func (h *AuditWorker) HandleAuditLog(ctx context.Context, msg amqp.Delivery) error {
-	// Extract OpenTelemetry context from AMQP headers
-	propagator := otel.GetTextMapPropagator()
-	ctx = propagator.Extract(ctx, headersCarrier(msg.Headers))
-
 	ctx, span := h.tracer.Start(ctx, "AuditWorker.HandleAuditLog")
 	defer span.End()
 
@@ -48,32 +44,4 @@ func (h *AuditWorker) HandleAuditLog(ctx context.Context, msg amqp.Delivery) err
 	}
 
 	return nil
-}
-
-// headersCarrier adapts amqp.Table to satisfy the propagation.TextMapCarrier interface
-// We duplicate this here to extract exactly how the producer injected it.
-type headersCarrier amqp.Table
-
-func (c headersCarrier) Get(key string) string {
-	val, ok := c[key]
-	if !ok {
-		return ""
-	}
-	strVal, ok := val.(string)
-	if !ok {
-		return ""
-	}
-	return strVal
-}
-
-func (c headersCarrier) Set(key string, value string) {
-	c[key] = value
-}
-
-func (c headersCarrier) Keys() []string {
-	keys := make([]string, 0, len(c))
-	for k := range c {
-		keys = append(keys, k)
-	}
-	return keys
 }

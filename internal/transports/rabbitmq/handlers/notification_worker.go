@@ -26,10 +26,6 @@ func NewNotificationWorker(notificationSrv services.NotificationService) *Notifi
 
 // HandleNotification processes messages from the notification queue
 func (h *NotificationWorker) HandleNotification(ctx context.Context, msg amqp.Delivery) error {
-	// Extract OpenTelemetry context from AMQP headers
-	propagator := otel.GetTextMapPropagator()
-	ctx = propagator.Extract(ctx, headersCarrier(msg.Headers))
-
 	ctx, span := h.tracer.Start(ctx, "NotificationWorker.HandleNotification")
 	defer span.End()
 
