@@ -44,6 +44,6 @@ func (u *userServiceRepository) GetUserDetailById(ctx context.Context, userId in
 			attribute.String("response_body", string(body)),
 		)
 	}
-	// ini harusnya gaboleh ngereturn byte gini sih, hasur udah di Unmarshal
+	// ini harusnya gaboleh ngereturn byte gini sih, harus udah di Unmarshal
 	return body
 }
