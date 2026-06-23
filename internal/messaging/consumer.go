@@ -155,8 +155,17 @@ func (c *consumer) Consume(ctx context.Context, queue string, prefetch int, hand
 					// Extract trace context from AMQP headers
 					ctxWithTrace := otel.GetTextMapPropagator().Extract(ctx, headersCarrier(msg.Headers))
 
-					// Create a span for message processing using the inherited context
-					processCtx, span := c.tracer.Start(ctxWithTrace, fmt.Sprintf("RMQ Consumer: %s", queue))
+					processCtx, span := c.tracer.Start(
+						ctxWithTrace,
+						fmt.Sprintf("RMQ Consumer: %s", queue),
+						trace.WithSpanKind(trace.SpanKindConsumer),
+
+						trace.WithAttributes(
+							attribute.String("messaging.system", "rabbitmq"),
+							attribute.String("messaging.operation", "process"),
+							attribute.String("messaging.destination", queue),
+						),
+					)
 
 					err := handler(processCtx, msg)
 					if err != nil {
